@@ -59,7 +59,7 @@ export default function Home() {
         <div style={styles.header}>
           <div style={styles.brand}>
             <div style={styles.logo}>S</div>
-            <div style={styles.title}>SplitSmart</div>
+            <div style={styles.title}>Sanika&apos;s SplitSmart</div>
           </div>
           <div style={styles.groupPill}>My Group</div>
         </div>
@@ -131,7 +131,7 @@ const styles = {
   logo: {
     width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center',
     color: '#fff', fontWeight: 800, fontSize: 18,
-    background: 'linear-gradient(135deg, var(--blue), var(--cyan))',
+    background: 'var(--blue)',
     boxShadow: '0 8px 18px -6px rgba(28,95,212,.55)',
   },
   title: { fontSize: 20, fontWeight: 800, letterSpacing: '-0.01em' },
