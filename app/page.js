@@ -11,19 +11,12 @@ const SEED = [
 
 const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
-// Basic "parse an expense from text" — just enough to work. In Hour 3 you'll replace
-// this naive version with a real AI call (Gemini) that understands messy human sentences.
-function parseExpense(text) {
-  const amountMatch = text.match(/\d[\d,]*(\.\d+)?/);
-  const amount = amountMatch ? Number(amountMatch[0].replace(/,/g, '')) : 0;
-  const name = text.replace(/\d[\d,]*(\.\d+)?/, '').replace(/\s+/g, ' ').trim() || 'Expense';
-  return { id: 'e-' + Date.now(), emoji: '🧾', name: name.charAt(0).toUpperCase() + name.slice(1), paidBy: 'You', amount };
-}
-
 export default function Home() {
   const [expenses, setExpenses] = useState(SEED);
   const [text, setText] = useState('');
   const [ready, setReady] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [error, setError] = useState('');
 
   // Load any saved expenses from the browser on first render.
   useEffect(() => {
@@ -43,11 +36,34 @@ export default function Home() {
 
   const total = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-  const addExpense = () => {
+  const addExpense = async () => {
     const t = text.trim();
-    if (!t) return;
-    setExpenses((list) => [...list, parseExpense(t)]);
-    setText('');
+    if (!t || isAdding) return;
+
+    setIsAdding(true);
+    setError('');
+    try {
+      const response = await fetch('/api/split', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: t }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to parse that expense');
+
+      setExpenses((list) => [...list, {
+        id: 'e-' + Date.now(),
+        emoji: '🧾',
+        name: result.description.charAt(0).toUpperCase() + result.description.slice(1),
+        paidBy: `split ${inr(result.amount)} among ${result.people}`,
+        amount: result.each,
+      }]);
+      setText('');
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   const removeExpense = (id) => setExpenses((list) => list.filter((e) => e.id !== id));
@@ -74,8 +90,11 @@ export default function Home() {
             placeholder="Add an expense…"
             aria-label="Add an expense"
           />
-          <button style={styles.addBtn} onClick={addExpense} aria-label="Add">+</button>
+          <button style={styles.addBtn} onClick={addExpense} disabled={isAdding} aria-label="Add">
+            {isAdding ? '…' : '+'}
+          </button>
         </div>
+        {error && <div style={styles.error} role="alert">{error}</div>}
 
         {/* Expense list */}
         <div style={styles.list}>
@@ -149,6 +168,7 @@ const styles = {
     background: 'linear-gradient(135deg, var(--blue), var(--cyan))',
     boxShadow: '0 10px 22px -8px rgba(28,95,212,.6)',
   },
+  error: { color: '#b42318', fontSize: 13, margin: '-4px 0 14px' },
   list: { display: 'flex', flexDirection: 'column', gap: 10, minHeight: 60 },
   empty: { color: 'var(--muted)', fontSize: 14, textAlign: 'center', padding: '24px 0' },
   item: {
