@@ -9,6 +9,8 @@ export default function Home() {
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true);
   const [expenses, setExpenses] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [groupId, setGroupId] = useState('');
   const [text, setText] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,31 +44,59 @@ export default function Home() {
     };
   }, []);
 
+  const loadGroups = async () => {
+    if (session?.demo) {
+      try {
+        const demoGroups = JSON.parse(localStorage.getItem('splitsmart.demo.groups') || '[]');
+        setGroups(demoGroups);
+        setGroupId((current) => demoGroups.some((group) => group.id === current) ? current : demoGroups[0]?.id || '');
+      } catch {
+        setGroups([]);
+        setGroupId('');
+      }
+      return;
+    }
+    const { data, error: loadError } = await supabase.from('groups').select('*').order('created_at');
+    if (loadError) {
+      setError(`Could not load groups: ${loadError.message}`);
+      return;
+    }
+    setGroups(data || []);
+    setGroupId((current) => data?.some((group) => group.id === current) ? current : data?.[0]?.id || '');
+  };
+
   useEffect(() => {
     if (!session) {
+      setGroups([]);
+      setGroupId('');
+      return;
+    }
+    loadGroups();
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || !groupId) {
       setExpenses([]);
       return;
     }
-
     if (session.demo) {
       try {
-        setExpenses(JSON.parse(localStorage.getItem('splitsmart.demo.expenses') || '[]'));
+        const allExpenses = JSON.parse(localStorage.getItem('splitsmart.demo.expenses') || '[]');
+        setExpenses(allExpenses.filter((expense) => expense.group_id === groupId));
       } catch {
         setExpenses([]);
       }
       return;
     }
-
     let active = true;
-    supabase.from('expenses').select('*').order('created_at', { ascending: true })
+    supabase.from('expenses').select('*').eq('group_id', groupId).order('created_at')
       .then(({ data, error: loadError }) => {
         if (!active) return;
-        if (loadError) setError(`Could not load expenses: ${loadError.message}`);
+        if (loadError) setError(`Could not load group expenses: ${loadError.message}`);
         else setExpenses(data || []);
       });
-
     return () => { active = false; };
-  }, [session]);
+  }, [session, groupId]);
 
   const signUp = async () => {
     if (!supabase) return;
@@ -99,9 +129,57 @@ export default function Home() {
     supabase?.auth.signOut();
   };
 
+  const createGroup = async () => {
+    const name = window.prompt('Name your group (for example, Goa Trip):')?.trim();
+    if (!name) return;
+    if (session.demo) {
+      const group = { id: 'demo-group-' + Date.now(), name, join_code: Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: new Date().toISOString() };
+      const nextGroups = [...groups, group];
+      localStorage.setItem('splitsmart.demo.groups', JSON.stringify(nextGroups));
+      setGroups(nextGroups);
+      setGroupId(group.id);
+      return;
+    }
+    const { data: group, error: createError } = await supabase.from('groups')
+      .insert({ name, created_by: session.user.id }).select().single();
+    if (createError) {
+      setError(`Could not create group: ${createError.message}`);
+      return;
+    }
+    const { error: memberError } = await supabase.from('group_members')
+      .insert({ group_id: group.id, user_id: session.user.id });
+    if (memberError) {
+      setError(`Could not add group membership: ${memberError.message}`);
+      return;
+    }
+    await loadGroups();
+    setGroupId(group.id);
+  };
+
+  const joinGroup = async () => {
+    const code = window.prompt('Enter the group invite code:')?.trim();
+    if (!code) return;
+    if (session.demo) {
+      const group = groups.find((candidate) => candidate.join_code === code.toUpperCase());
+      if (!group) {
+        setError('No demo group matches that invite code.');
+        return;
+      }
+      setGroupId(group.id);
+      return;
+    }
+    const { data: joinedId, error: joinError } = await supabase.rpc('join_group', { code });
+    if (joinError) {
+      setError(`Could not join group: ${joinError.message}`);
+      return;
+    }
+    await loadGroups();
+    setGroupId(joinedId);
+  };
+
   const addExpense = async () => {
     const sentence = text.trim();
-    if (!sentence || isAdding || !session || !supabase) return;
+    if (!sentence || isAdding || !session || !groupId) return;
 
     setIsAdding(true);
     setError('');
@@ -116,6 +194,7 @@ export default function Home() {
 
       const expense = {
         id: 'e-' + Date.now(),
+        group_id: groupId,
         name: result.description || sentence,
         paid_by: `split ${inr(result.amount)} among ${result.people}`,
         amount: result.each,
@@ -123,12 +202,13 @@ export default function Home() {
         created_at: new Date().toISOString(),
       };
       if (session.demo) {
-        const nextExpenses = [...expenses, expense];
+        const allExpenses = JSON.parse(localStorage.getItem('splitsmart.demo.expenses') || '[]');
+        const nextExpenses = [...allExpenses, expense];
         localStorage.setItem('splitsmart.demo.expenses', JSON.stringify(nextExpenses));
-        setExpenses(nextExpenses);
+        setExpenses(nextExpenses.filter((item) => item.group_id === groupId));
       } else {
         const { data: row, error: insertError } = await supabase.from('expenses')
-          .insert({ user_id: session.user.id, name: expense.name, paid_by: expense.paid_by, amount: expense.amount })
+          .insert({ user_id: session.user.id, group_id: groupId, name: expense.name, paid_by: expense.paid_by, amount: expense.amount })
           .select()
           .single();
         if (insertError) throw new Error(`Could not save expense: ${insertError.message}`);
@@ -146,9 +226,10 @@ export default function Home() {
     if (!supabase || !session) return;
     setError('');
     if (session.demo) {
-      const nextExpenses = expenses.filter((expense) => expense.id !== id);
+      const allExpenses = JSON.parse(localStorage.getItem('splitsmart.demo.expenses') || '[]');
+      const nextExpenses = allExpenses.filter((expense) => expense.id !== id);
       localStorage.setItem('splitsmart.demo.expenses', JSON.stringify(nextExpenses));
-      setExpenses(nextExpenses);
+      setExpenses(nextExpenses.filter((expense) => expense.group_id === groupId));
       return;
     }
     const { error: deleteError } = await supabase.from('expenses').delete().eq('id', id);
@@ -160,6 +241,7 @@ export default function Home() {
   };
 
   const total = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const currentGroup = groups.find((group) => group.id === groupId);
 
   if (checking) return <main style={styles.page}><div style={styles.card}>Loading…</div></main>;
 
@@ -195,7 +277,16 @@ export default function Home() {
           <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
           <button style={styles.signout} onClick={signOut}>Sign out</button>
         </div>
-        <div style={styles.addRow}>
+        <div style={styles.groupBar}>
+          <select style={styles.select} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Select group">
+            {!groups.length && <option value="">No groups yet</option>}
+            {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+          </select>
+          <button style={styles.gbtn} onClick={createGroup}>+ New</button>
+          <button style={styles.gbtn} onClick={joinGroup}>Join</button>
+        </div>
+        {currentGroup && <div style={styles.codeLine}>Invite code: <b>{currentGroup.join_code}</b></div>}
+        {groupId && <div style={styles.addRow}>
           <input
             style={styles.input}
             value={text}
@@ -207,7 +298,8 @@ export default function Home() {
           <button style={styles.addBtn} onClick={addExpense} disabled={isAdding} aria-label="Add">
             {isAdding ? '…' : '+'}
           </button>
-        </div>
+        </div>}
+        {!groupId && <div style={styles.empty}>Create a group or join one with an invite code.</div>}
         {error && <div style={styles.error} role="alert">{error}</div>}
         <div style={styles.list}>
           {expenses.length === 0 && <div style={styles.empty}>No expenses yet — add your first one above.</div>}
@@ -245,6 +337,10 @@ const styles = {
   demoBtn: { width: '100%', border: '1px dashed var(--blue)', borderRadius: 12, padding: 11, marginTop: 10, color: 'var(--blue)', fontSize: 14, fontWeight: 800, background: '#fff', cursor: 'pointer' },
   signout: { border: '1px solid var(--line)', background: '#fff', borderRadius: 10, padding: '7px 13px', fontSize: 13, fontWeight: 700, color: 'var(--muted)', cursor: 'pointer' },
   addRow: { display: 'flex', gap: 10, marginBottom: 16 },
+  groupBar: { display: 'flex', gap: 8, marginBottom: 8 },
+  select: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', fontSize: 14, fontWeight: 700, background: '#f7f9fc', color: 'var(--ink)' },
+  gbtn: { flex: 'none', border: '1px solid var(--line)', background: '#fff', borderRadius: 12, padding: '0 12px', fontSize: 13.5, fontWeight: 800, color: 'var(--blue)', cursor: 'pointer' },
+  codeLine: { fontSize: 12.5, color: 'var(--muted)', marginBottom: 14 },
   addBtn: { flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
   error: { color: '#b42318', fontSize: 13, margin: '-4px 0 14px' },
   message: { marginTop: 12, fontSize: 13, color: 'var(--blue)' },
