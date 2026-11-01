@@ -418,10 +418,13 @@ export default function Home() {
             <div style={styles.sectionTitle}>Profile & Settings</div>
             <div style={styles.profileHeader}>
               {profilePicture ? <img src={profilePicture} alt="Profile" style={styles.avatar} /> : <div style={styles.avatarFallback}>{(displayName || 'U').charAt(0).toUpperCase()}</div>}
-              <div><b>{displayName || 'Your name'}</b><div style={styles.memberRow}>{inr(total)} total spent</div></div>
+              <div style={styles.profileInfo}>
+                <b>{displayName || 'Your name'}</b>
+                <label style={styles.uploadLabel}>Upload profile picture<input type="file" accept="image/*" onChange={uploadProfilePicture} style={styles.fileInput} /></label>
+                <div style={styles.memberRow}>{inr(total)} total spent</div>
+              </div>
             </div>
             <input style={styles.input} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your display name" aria-label="Profile name" />
-            <label style={styles.uploadLabel}>Upload profile picture<input type="file" accept="image/*" onChange={uploadProfilePicture} style={styles.fileInput} /></label>
             <button style={styles.gbtn} onClick={saveProfileName}>Save profile</button>
             <div style={styles.themeLabel}>Theme</div>
             <select style={styles.select} value={theme} onChange={(event) => setTheme(event.target.value)}>
@@ -647,7 +650,8 @@ const styles = {
   profileHeader: { display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 14, marginBottom: 12, borderBottom: '1px solid var(--line)' },
   avatar: { width: 58, height: 58, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent)' },
   avatarFallback: { width: 58, height: 58, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: '#fff', fontSize: 24, fontWeight: 800 },
-  uploadLabel: { display: 'block', border: '1px dashed var(--accent)', borderRadius: 10, padding: 10, marginBottom: 10, color: 'var(--accent)', fontSize: 13, fontWeight: 700, textAlign: 'center', cursor: 'pointer' },
+  profileInfo: { minWidth: 0, flex: 1 },
+  uploadLabel: { display: 'block', border: 'none', padding: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 800, textAlign: 'left', cursor: 'pointer' },
   fileInput: { display: 'none' },
   themeLabel: { margin: '14px 0 6px', fontSize: 13, fontWeight: 800 },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 18 },
