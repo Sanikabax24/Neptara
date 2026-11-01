@@ -16,6 +16,7 @@ export default function Home() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [profilePicture, setProfilePicture] = useState('');
   const [activeView, setActiveView] = useState('My Groups');
   const [theme, setTheme] = useState('Ocean Blue');
   const [authMsg, setAuthMsg] = useState('');
@@ -31,6 +32,10 @@ export default function Home() {
     { name: '', paidAmount: '', reason: '' },
   ]);
   const [showCustomSplit, setShowCustomSplit] = useState(false);
+  useEffect(() => {
+    const savedPicture = window.localStorage.getItem('splitsmart-profile-picture');
+    if (savedPicture) setProfilePicture(savedPicture);
+  }, []);
   useEffect(() => {
     if (!supabase) {
       setAuthMsg('Authentication is not configured.');
@@ -131,6 +136,23 @@ export default function Home() {
     setMembers((list) => list.map((member) => member.user_id === session.user.id
       ? { ...member, display_name: displayName.trim() }
       : member));
+  };
+
+  const uploadProfilePicture = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Choose an image file for your profile picture.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const picture = String(reader.result);
+      setProfilePicture(picture);
+      window.localStorage.setItem('splitsmart-profile-picture', picture);
+    };
+    reader.onerror = () => setError('Could not read that image.');
+    reader.readAsDataURL(file);
   };
 
   const signOut = async () => {
@@ -282,15 +304,22 @@ export default function Home() {
   const total = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const currentGroup = groups.find((group) => group.id === groupId);
   const settlementRows = expenses.flatMap((expense) => (Array.isArray(expense.split_details) ? expense.split_details : [])
-    .filter((detail) => detail.user_id && detail.user_id !== session?.user?.id && Number(detail.amount) > 0)
-    .map((detail) => ({ ...detail, expenseName: expense.name, from: detail.name || 'Member', to: displayName || 'You' })));
+    .filter((detail) => Number(detail.amount) > 0 && detail.name && detail.name.trim() !== (displayName || '').trim())
+    .map((detail) => ({ ...detail, expenseName: expense.name, from: detail.name, to: displayName || 'You' })));
+  const expenseChart = expenses.reduce((result, expense) => {
+    const key = expense.name || 'Other';
+    result[key] = (result[key] || 0) + Number(expense.amount || 0);
+    return result;
+  }, {});
+  const chartRows = Object.entries(expenseChart).sort(([, a], [, b]) => b - a).slice(0, 8);
+  const chartMax = Math.max(...chartRows.map(([, amount]) => amount), 1);
   const themeMap = {
-    'Ocean Blue': { card: '#dff4ff', accent: '#1c5fd4' },
-    Midnight: { card: '#17233d', accent: '#9dc7ff' },
-    Galaxy: { card: '#eadfff', accent: '#7139b7' },
-    Arctic: { card: '#eaf8ff', accent: '#2588b8' },
-    Sunset: { card: '#ffe1d2', accent: '#d8663b' },
-    Minimal: { card: '#f5f6f8', accent: '#566176' },
+    'Ocean Blue': { page: '#dff4ff', surface: '#c9edff', panel: '#eaf9ff', item: '#d5f2ff', text: '#0d1b3e', muted: '#536b8e', line: '#b7dced', accent: '#1c5fd4' },
+    Midnight: { page: '#0c1428', surface: '#17233d', panel: '#203252', item: '#263b5c', text: '#f5f8ff', muted: '#b5c4dd', line: '#3b5072', accent: '#9dc7ff' },
+    Galaxy: { page: '#eadfff', surface: '#ddcaff', panel: '#f3edff', item: '#e7d8ff', text: '#24133f', muted: '#725a91', line: '#c8b3e6', accent: '#7139b7' },
+    Arctic: { page: '#eaf8ff', surface: '#d6f1ff', panel: '#f5fcff', item: '#e0f6ff', text: '#12334a', muted: '#53758b', line: '#b9dbe9', accent: '#2588b8' },
+    Sunset: { page: '#ffe1d2', surface: '#ffd0bc', panel: '#fff0e8', item: '#ffe0d2', text: '#4b2017', muted: '#8b6559', line: '#edc0ae', accent: '#d8663b' },
+    Minimal: { page: '#f5f6f8', surface: '#e8ebf0', panel: '#ffffff', item: '#eef1f5', text: '#263044', muted: '#687286', line: '#d4dae4', accent: '#566176' },
   };
   const currentTheme = themeMap[theme];
 
@@ -315,37 +344,60 @@ export default function Home() {
   }
 
   return (
-    <main style={{ ...styles.page, '--accent': currentTheme.accent }}>
+    <main style={{
+      ...styles.page,
+      background: currentTheme.page,
+      '--accent': currentTheme.accent,
+      '--surface': currentTheme.surface,
+      '--panel': currentTheme.panel,
+      '--item': currentTheme.item,
+      '--text': currentTheme.text,
+      '--muted': currentTheme.muted,
+      '--line': currentTheme.line,
+    }}>
       <nav style={styles.nav}>
-        {['My Groups', 'My Expenses', 'Settlements', 'Statistics', 'Notifications', 'Profile & Settings'].map((view) => (
+        {['My Groups', 'My Expenses', 'Settlements', 'Statistics', 'Profile & Settings'].map((view) => (
           <button key={view} style={{ ...styles.navBtn, ...(activeView === view ? styles.navBtnActive : {}) }} onClick={() => setActiveView(view)}>{view}</button>
         ))}
       </nav>
-      <div style={{ ...styles.card, background: currentTheme.card }}>
+      <div style={{ ...styles.card, background: 'var(--surface)' }}>
         <div style={styles.header}>
           <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
           <button style={styles.signout} onClick={signOut}>Sign out</button>
         </div>
         {activeView === 'Profile & Settings' && (
           <div style={styles.settingsPanel}>
-            <div style={styles.dialogTitle}>Customisable Themes</div>
-            <input style={styles.input} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your display name" />
-            <button style={styles.gbtn} onClick={saveProfileName}>Save name</button>
+            <div style={styles.sectionTitle}>Profile & Settings</div>
+            <div style={styles.profileHeader}>
+              {profilePicture ? <img src={profilePicture} alt="Profile" style={styles.avatar} /> : <div style={styles.avatarFallback}>{(displayName || 'U').charAt(0).toUpperCase()}</div>}
+              <div><b>{displayName || 'Your name'}</b><div style={styles.memberRow}>{inr(total)} total spent</div></div>
+            </div>
+            <input style={styles.input} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your display name" aria-label="Profile name" />
+            <label style={styles.uploadLabel}>Upload profile picture<input type="file" accept="image/*" onChange={uploadProfilePicture} style={styles.fileInput} /></label>
+            <button style={styles.gbtn} onClick={saveProfileName}>Save profile</button>
+            <div style={styles.themeLabel}>Theme</div>
             <select style={styles.select} value={theme} onChange={(event) => setTheme(event.target.value)}>
               {Object.keys(themeMap).map((name) => <option key={name}>{name}</option>)}
             </select>
-            <div style={styles.dialogHint}>Ocean Blue, Midnight, Galaxy, Arctic, Sunset, and Minimal.</div>
           </div>
         )}
         {activeView === 'Settlements' && (
           <div style={styles.settlementPanel}>
             <div style={styles.sectionTitle}>Settlement</div>
             {settlementRows.length === 0 && <div style={styles.empty}>No outstanding custom payments.</div>}
-            {settlementRows.map((row, index) => <div style={styles.settlementRow} key={`${row.expenseName}-${index}`}><b>{row.from} → {row.to}</b><strong>{inr(row.amount)}</strong><span>{row.reason || row.expenseName}</span></div>)}
+            {settlementRows.map((row, index) => <div style={styles.settlementRow} key={`${row.expenseName}-${index}`}><b>{row.from} owes {row.to}</b><strong>{inr(row.amount)}</strong><span style={styles.settlementReason}>Reason: {row.reason || row.expenseName}</span></div>)}
           </div>
         )}
-        {activeView === 'Statistics' && <div style={styles.infoPanel}><div style={styles.sectionTitle}>Statistics</div><div>Total group spending: <b>{inr(total)}</b></div><div>Expenses recorded: <b>{expenses.length}</b></div></div>}
-        {activeView === 'Notifications' && <div style={styles.infoPanel}><div style={styles.sectionTitle}>Notifications</div><div>No new notifications.</div></div>}
+        {activeView === 'Statistics' && (
+          <div style={styles.infoPanel}>
+            <div style={styles.sectionTitle}>Statistics</div>
+            <div style={styles.statsGrid}><div style={styles.statsGridItem}><b>{inr(total)}</b><span>Total spent</span></div><div style={styles.statsGridItem}><b>{expenses.length}</b><span>Expenses</span></div><div style={styles.statsGridItem}><b>{expenses.length ? inr(total / expenses.length) : inr(0)}</b><span>Average expense</span></div></div>
+            <div style={styles.chartTitle}>Spending by expense</div>
+            {!chartRows.length && <div style={styles.empty}>Add expenses to see your chart.</div>}
+            {chartRows.map(([name, amount]) => <div style={styles.chartRow} key={name}><div style={styles.chartLabel}><span>{name}</span><b>{inr(amount)}</b></div><div style={styles.chartTrack}><div style={{ ...styles.chartBar, width: `${Math.max(4, amount / chartMax * 100)}%` }} /></div></div>)}
+            {chartRows.length > 0 && <div style={styles.analysis}>Your largest expense is <b>{chartRows[0][0]}</b> at <b>{inr(chartRows[0][1])}</b>. This is {Math.round(chartRows[0][1] / total * 100)}% of your recorded spending.</div>}
+          </div>
+        )}
         {activeView === 'My Groups' && <div style={styles.groupBar}>
           <select style={styles.select} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Select group">
             {!groups.length && <option value="">No groups yet</option>}
@@ -359,12 +411,17 @@ export default function Home() {
             {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </select>
         </div>}
-        {currentGroup && <div style={styles.codeLine}>Invite code: <b>{currentGroup.join_code}</b></div>}
-        {groupId && <div style={styles.memberPanel}>
+        {activeView === 'My Groups' && <div style={styles.groupTable}>
+          <div style={styles.tableHeader}><span>Group name</span><span>Invite code</span><span>Status</span></div>
+          {groups.map((group) => <button key={group.id} style={styles.tableRow} onClick={() => setGroupId(group.id)}><span>{group.name}</span><span>{group.join_code}</span><span>{group.id === groupId ? 'Selected' : 'Open'}</span></button>)}
+          {!groups.length && <div style={styles.empty}>No groups yet.</div>}
+        </div>}
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && currentGroup && <div style={styles.codeLine}>Invite code: <b>{currentGroup.join_code}</b></div>}
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && groupId && <div style={styles.memberPanel}>
           <div style={styles.memberTitle}>People in this group ({members.length})</div>
           {members.map((member, index) => <div key={member.user_id} style={styles.memberRow}>{member.display_name || `Member ${index + 1}`}{member.user_id === session.user.id ? ' (you)' : ''}</div>)}
         </div>}
-        {groupId && <div style={styles.addRow}>
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && groupId && <div style={styles.addRow}>
           <input
             style={styles.input}
             value={text}
@@ -377,8 +434,8 @@ export default function Home() {
             {isAdding ? '…' : '+'}
           </button>
         </div>}
-        {groupId && <button style={styles.customBtn} onClick={() => { setShowCustomSplit((visible) => !visible); setError(''); }}>+ Custom split</button>}
-        {groupId && showCustomSplit && (
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && groupId && <button style={styles.customBtn} onClick={() => { setShowCustomSplit((visible) => !visible); setError(''); }}>+ Custom split</button>}
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && groupId && showCustomSplit && (
           <form style={styles.customPanel} onSubmit={addCustomExpense}>
             <div style={styles.dialogTitle}>Custom expense split</div>
             <input style={styles.input2} value={customName} onChange={(event) => setCustomName(event.target.value)} placeholder="Expense name" aria-label="Expense name" />
@@ -401,9 +458,9 @@ export default function Home() {
             <button type="submit" style={styles.authBtn}>Save custom split</button>
           </form>
         )}
-        {!groupId && <div style={styles.empty}>Create a group or join one with an invite code.</div>}
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && !groupId && <div style={styles.empty}>Create a group or join one with an invite code.</div>}
         {error && <div style={styles.error} role="alert">{error}</div>}
-        <div style={styles.list}>
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && <div style={styles.list}>
           {expenses.length === 0 && <div style={styles.empty}>No expenses yet — add your first one above.</div>}
           {expenses.map((expense) => (
             <div key={expense.id} style={styles.item}>
@@ -416,8 +473,8 @@ export default function Home() {
               <button style={styles.remove} onClick={() => removeExpense(expense.id)} aria-label={`Remove ${expense.name}`}>×</button>
             </div>
           ))}
-        </div>
-        <div style={styles.total}>Total {inr(total)}</div>
+        </div>}
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && <div style={styles.total}>Total {inr(total)}</div>}
         {groupDialog && (
           <div style={styles.dialogBackdrop}>
             <form style={styles.dialog} onSubmit={submitGroupDialog}>
@@ -443,55 +500,54 @@ export default function Home() {
 }
 
 const styles = {
-  page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 48px' },
+  page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 48px', color: 'var(--text)' },
   nav: { width: '100%', maxWidth: 420, display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 0 10px' },
-  navBtn: { flex: 'none', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px', background: 'rgba(255,255,255,.75)', color: 'var(--ink)', fontSize: 11, fontWeight: 800, cursor: 'pointer' },
+  navBtn: { flex: 'none', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px', background: 'var(--panel)', color: 'var(--text)', fontSize: 11, fontWeight: 800, cursor: 'pointer' },
   navBtnActive: { background: 'var(--accent)', color: '#fff' },
-  card: { width: '100%', maxWidth: 420, background: '#dff4ff', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid #b9e4f7', padding: 20, marginTop: 12 },
+  card: { width: '100%', maxWidth: 420, background: 'var(--surface)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid var(--line)', padding: 20, marginTop: 12 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   brand: { display: 'flex', alignItems: 'center', gap: 10 },
-  logo: { width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 18, background: 'linear-gradient(135deg, var(--blue), var(--cyan))' },
+  logo: { width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 18, background: 'var(--accent)' },
   title: { fontSize: 20, fontWeight: 800 },
   help: { color: 'var(--muted)', fontSize: 14, marginBottom: 16 },
-  input: { flex: 1, border: '1px solid var(--line)', borderRadius: 14, padding: '13px 15px', fontSize: 15, outline: 'none', background: '#f7f9fc' },
-  input2: { width: '100%', border: '1px solid var(--line)', borderRadius: 12, padding: '12px 14px', fontSize: 15, outline: 'none', background: '#f7f9fc', marginBottom: 10, boxSizing: 'border-box' },
+  input: { flex: 1, border: '1px solid var(--line)', borderRadius: 14, padding: '13px 15px', fontSize: 15, outline: 'none', background: 'var(--panel)', color: 'var(--text)' },
+  input2: { width: '100%', border: '1px solid var(--line)', borderRadius: 12, padding: '12px 14px', fontSize: 15, outline: 'none', background: 'var(--panel)', color: 'var(--text)', marginBottom: 10, boxSizing: 'border-box' },
   authRow: { display: 'flex', gap: 10, marginTop: 6 },
-  authBtn: { flex: 1, border: 'none', borderRadius: 12, padding: 12, color: '#fff', fontSize: 15, fontWeight: 800, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
-  authBtnAlt: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: 12, color: 'var(--ink)', fontSize: 15, fontWeight: 800, background: '#fff', cursor: 'pointer' },
+  authBtn: { flex: 1, border: 'none', borderRadius: 12, padding: 12, color: '#fff', fontSize: 15, fontWeight: 800, background: 'var(--accent)', cursor: 'pointer' },
+  authBtnAlt: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: 12, color: 'var(--text)', fontSize: 15, fontWeight: 800, background: 'var(--panel)', cursor: 'pointer' },
   demoBtn: { width: '100%', border: '1px dashed var(--blue)', borderRadius: 12, padding: 11, marginTop: 10, color: 'var(--blue)', fontSize: 14, fontWeight: 800, background: '#fff', cursor: 'pointer' },
-  signout: { border: '1px solid var(--line)', background: '#fff', borderRadius: 10, padding: '7px 13px', fontSize: 13, fontWeight: 700, color: 'var(--muted)', cursor: 'pointer' },
+  signout: { border: '1px solid var(--line)', background: 'var(--panel)', borderRadius: 10, padding: '7px 13px', fontSize: 13, fontWeight: 700, color: 'var(--muted)', cursor: 'pointer' },
   addRow: { display: 'flex', gap: 10, marginBottom: 16 },
   groupBar: { display: 'flex', gap: 8, marginBottom: 8 },
-  select: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', fontSize: 14, fontWeight: 700, background: '#f7f9fc', color: 'var(--ink)' },
-  gbtn: { flex: 'none', border: '1px solid var(--line)', background: '#fff', borderRadius: 12, padding: '0 12px', fontSize: 13.5, fontWeight: 800, color: 'var(--blue)', cursor: 'pointer' },
+  select: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', fontSize: 14, fontWeight: 700, background: 'var(--panel)', color: 'var(--text)' },
+  gbtn: { flex: 'none', border: '1px solid var(--line)', background: 'var(--panel)', borderRadius: 12, padding: '0 12px', fontSize: 13.5, fontWeight: 800, color: 'var(--accent)', cursor: 'pointer' },
   codeLine: { fontSize: 12.5, color: 'var(--muted)', marginBottom: 14 },
-  memberPanel: { background: '#f7f9fc', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 12px', marginBottom: 12 },
+  memberPanel: { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 12px', marginBottom: 12 },
   memberTitle: { fontSize: 13, fontWeight: 800, marginBottom: 6 },
   memberRow: { color: 'var(--muted)', fontSize: 12.5, lineHeight: 1.6 },
-  customBtn: { width: '100%', border: '1px dashed var(--blue)', borderRadius: 12, padding: 10, marginBottom: 14, color: 'var(--blue)', fontWeight: 800, background: '#fff', cursor: 'pointer' },
-  customPanel: { background: 'rgba(255,255,255,.62)', border: '1px solid #b9e4f7', borderRadius: 16, padding: 14, marginBottom: 14 },
+  customBtn: { width: '100%', border: '1px dashed var(--accent)', borderRadius: 12, padding: 10, marginBottom: 14, color: 'var(--accent)', fontWeight: 800, background: 'var(--panel)', cursor: 'pointer' },
+  customPanel: { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 16, padding: 14, marginBottom: 14 },
   fieldLabel: { display: 'block', color: 'var(--muted)', fontSize: 12.5, fontWeight: 700, marginBottom: 6 },
   customPeopleList: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 },
-  personBox: { background: '#fff', border: '1px solid #b9e4f7', borderRadius: 12, padding: 10 },
-  personLabel: { color: 'var(--ink)', fontSize: 13, fontWeight: 800, marginBottom: 8 },
+  personBox: { background: 'var(--item)', border: '1px solid var(--line)', borderRadius: 12, padding: 10 },
+  personLabel: { color: 'var(--text)', fontSize: 13, fontWeight: 800, marginBottom: 8 },
   splitInputs: { display: 'flex', gap: 8 },
   percentInput: { width: 76, border: '1px solid var(--line)', borderRadius: 10, padding: '10px 8px', fontSize: 14, outline: 'none' },
   reasonInput: { flex: 1, minWidth: 0, border: '1px solid var(--line)', borderRadius: 10, padding: '10px 8px', fontSize: 14, outline: 'none' },
-  percentTotal: { color: 'var(--blue)', fontSize: 13, fontWeight: 800, marginBottom: 10 },
-  dialogHint: { color: 'var(--muted)', fontSize: 12, margin: '-4px 0 10px' },
-  settingsPanel: { background: 'rgba(255,255,255,.65)', borderRadius: 14, padding: 12, marginBottom: 14 },
-  settlementPanel: { background: 'rgba(255,255,255,.65)', borderRadius: 14, padding: 12, marginBottom: 14 },
-  infoPanel: { background: 'rgba(255,255,255,.65)', borderRadius: 14, padding: 14, marginBottom: 14, lineHeight: 1.8 },
+  percentTotal: { color: 'var(--accent)', fontSize: 13, fontWeight: 800, marginBottom: 10 },
+  settingsPanel: { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, marginBottom: 14 },
+  settlementPanel: { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, marginBottom: 14 },
+  infoPanel: { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, marginBottom: 14, lineHeight: 1.8 },
   sectionTitle: { fontSize: 18, fontWeight: 800, marginBottom: 10 },
   settlementRow: { display: 'grid', gridTemplateColumns: '1fr auto', gap: 4, padding: '10px 0', borderTop: '1px solid var(--line)' },
   settlementReason: { gridColumn: '1 / -1', color: 'var(--muted)', fontSize: 12.5 },
-  addBtn: { flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
+  addBtn: { flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700, background: 'var(--accent)', cursor: 'pointer' },
   error: { color: '#b42318', fontSize: 13, margin: '-4px 0 14px' },
   message: { marginTop: 12, fontSize: 13, color: 'var(--blue)' },
   list: { display: 'flex', flexDirection: 'column', gap: 10, minHeight: 60 },
   empty: { color: 'var(--muted)', fontSize: 14, textAlign: 'center', padding: '24px 0' },
-  item: { display: 'flex', alignItems: 'center', gap: 12, background: '#dff4ff', border: '1px solid #b9e4f7', borderRadius: 16, padding: '12px 14px' },
-  itemEmoji: { width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center', background: '#fff', border: '1px solid var(--line)', fontSize: 19, flex: 'none' },
+  item: { display: 'flex', alignItems: 'center', gap: 12, background: 'var(--item)', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 14px' },
+  itemEmoji: { width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center', background: 'var(--panel)', border: '1px solid var(--line)', fontSize: 19, flex: 'none' },
   itemMain: { flex: 1, minWidth: 0 },
   itemName: { fontWeight: 700, fontSize: 15 },
   itemPaid: { color: 'var(--muted)', fontSize: 12.5, marginTop: 1 },
@@ -499,6 +555,23 @@ const styles = {
   remove: { flex: 'none', width: 26, height: 26, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' },
   total: { textAlign: 'center', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--line)', fontWeight: 800, fontSize: 16 },
   dialogBackdrop: { position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 16, background: 'rgba(13,27,62,.35)', zIndex: 10 },
-  dialog: { width: '100%', maxWidth: 360, background: 'var(--card)', borderRadius: 18, padding: 18, boxShadow: '0 20px 50px rgba(13,27,62,.25)' },
+  dialog: { width: '100%', maxWidth: 360, background: 'var(--panel)', borderRadius: 18, padding: 18, boxShadow: '0 20px 50px rgba(13,27,62,.25)' },
   dialogTitle: { fontWeight: 800, fontSize: 17, marginBottom: 14 },
+  groupTable: { border: '1px solid var(--line)', borderRadius: 14, overflow: 'hidden', marginBottom: 14 },
+  tableHeader: { display: 'grid', gridTemplateColumns: '1.3fr 1fr .7fr', gap: 8, padding: '9px 10px', background: 'var(--item)', color: 'var(--muted)', fontSize: 11, fontWeight: 800 },
+  tableRow: { width: '100%', display: 'grid', gridTemplateColumns: '1.3fr 1fr .7fr', gap: 8, padding: '11px 10px', border: 0, borderTop: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--text)', textAlign: 'left', fontSize: 12, cursor: 'pointer' },
+  profileHeader: { display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 14, marginBottom: 12, borderBottom: '1px solid var(--line)' },
+  avatar: { width: 58, height: 58, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent)' },
+  avatarFallback: { width: 58, height: 58, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: '#fff', fontSize: 24, fontWeight: 800 },
+  uploadLabel: { display: 'block', border: '1px dashed var(--accent)', borderRadius: 10, padding: 10, marginBottom: 10, color: 'var(--accent)', fontSize: 13, fontWeight: 700, textAlign: 'center', cursor: 'pointer' },
+  fileInput: { display: 'none' },
+  themeLabel: { margin: '14px 0 6px', fontSize: 13, fontWeight: 800 },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 18 },
+  statsGridItem: { background: 'var(--item)', borderRadius: 10, padding: 8 },
+  chartTitle: { fontSize: 14, fontWeight: 800, marginBottom: 10 },
+  chartRow: { marginBottom: 10 },
+  chartLabel: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 },
+  chartTrack: { height: 10, borderRadius: 99, background: 'var(--item)', overflow: 'hidden' },
+  chartBar: { height: '100%', borderRadius: 99, background: 'var(--accent)' },
+  analysis: { marginTop: 16, padding: 10, borderRadius: 10, background: 'var(--item)', color: 'var(--muted)', fontSize: 12.5, lineHeight: 1.5 },
 };
