@@ -1,8 +1,11 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'SplitSmart',
+  title: 'Neptara · SplitSmart',
   description: 'Split expenses with your group — the easy way.',
+  icons: {
+    icon: '/neptara-logo.png',
+  },
 };
 
 export const viewport = {

@@ -352,7 +352,7 @@ export default function Home() {
       <main style={styles.page}>
         <div style={styles.card}>
           <div style={styles.header}>
-            <div style={styles.brand}><div style={styles.logo}>N</div><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
+            <div style={styles.brand}><img src="/neptara-logo.png" alt="Neptara logo" style={styles.logo} /><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
           </div>
           <p style={styles.help}>Enter any details for instant login. No email is sent or verified.</p>
           <input style={styles.input2} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" aria-label="Your name" />
@@ -384,7 +384,7 @@ export default function Home() {
       </nav>
       <div style={{ ...styles.card, background: 'var(--surface)' }}>
         <div style={styles.header}>
-          <div style={styles.brand}><div style={styles.logo}>N</div><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
+          <div style={styles.brand}><img src="/neptara-logo.png" alt="Neptara logo" style={styles.logo} /><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
           <button style={styles.signout} onClick={signOut}>Sign out</button>
         </div>
         {activeView === 'Profile & Settings' && (
@@ -548,7 +548,7 @@ const styles = {
   brand: { display: 'flex', alignItems: 'center', gap: 10 },
   brandStack: { display: 'flex', flexDirection: 'column', lineHeight: 1.05 },
   productName: { fontSize: 24, fontWeight: 900, letterSpacing: '.01em' },
-  logo: { width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 18, background: 'var(--accent)' },
+  logo: { width: 46, height: 46, borderRadius: 12, objectFit: 'cover', display: 'block', border: '1px solid var(--line)' },
   title: { fontSize: 20, fontWeight: 800 },
   help: { color: 'var(--muted)', fontSize: 14, marginBottom: 16 },
   input: { flex: 1, border: '1px solid var(--line)', borderRadius: 14, padding: '13px 15px', fontSize: 15, outline: 'none', background: 'var(--panel)', color: 'var(--text)' },
