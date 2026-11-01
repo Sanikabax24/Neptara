@@ -101,8 +101,20 @@ export default function Home() {
   const signUp = async () => {
     if (!supabase) return;
     setAuthMsg('');
-    const { error: signUpError } = await supabase.auth.signUp({ email, password });
-    setAuthMsg(signUpError ? signUpError.message : 'Account created — you are signed in!');
+    if (!email.trim() || password.length < 6) {
+      setAuthMsg('Enter a valid email and a password with at least 6 characters.');
+      return;
+    }
+    const { data, error: signUpError } = await supabase.auth.signUp({ email: email.trim(), password });
+    if (!signUpError && data.session) {
+      setAuthMsg('Account created — you are signed in!');
+      return;
+    }
+    if (signUpError?.message?.toLowerCase().includes('rate limit')) {
+      setAuthMsg('Supabase email limit reached. If this account already exists, use Sign in. You can also use the demo account while the limit resets.');
+      return;
+    }
+    setAuthMsg(signUpError ? signUpError.message : 'Check your email to confirm your account, then sign in.');
   };
 
   const signIn = async () => {
