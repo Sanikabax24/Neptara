@@ -12,11 +12,11 @@ export default function Home() {
   const [groups, setGroups] = useState([]);
   const [groupId, setGroupId] = useState('');
   const [text, setText] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [authMsg, setAuthMsg] = useState('');
   const [error, setError] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [groupDialog, setGroupDialog] = useState(null);
+  const [groupDialogValue, setGroupDialogValue] = useState('');
   useEffect(() => {
     if (!supabase) {
       setAuthMsg('Authentication is not configured.');
@@ -85,8 +85,8 @@ export default function Home() {
     if (signOutError) setError(`Could not sign out: ${signOutError.message}`);
   };
 
-  const createGroup = async () => {
-    const name = window.prompt('Name your group (for example, Goa Trip):')?.trim();
+  const createGroup = async (name) => {
+    name = name.trim();
     if (!name) return;
     const { data: group, error: createError } = await supabase.from('groups')
       .insert({ name, created_by: session.user.id }).select().single();
@@ -104,8 +104,8 @@ export default function Home() {
     setGroupId(group.id);
   };
 
-  const joinGroup = async () => {
-    const code = window.prompt('Enter the group invite code:')?.trim();
+  const joinGroup = async (code) => {
+    code = code.trim();
     if (!code) return;
     const { data: joinedId, error: joinError } = await supabase.rpc('join_group', { code });
     if (joinError) {
@@ -114,6 +114,21 @@ export default function Home() {
     }
     await loadGroups();
     setGroupId(joinedId);
+  };
+
+  const openGroupDialog = (type) => {
+    setGroupDialog(type);
+    setGroupDialogValue('');
+    setError('');
+  };
+
+  const submitGroupDialog = async (event) => {
+    event.preventDefault();
+    const value = groupDialogValue.trim();
+    if (groupDialog === 'create') await createGroup(value);
+    else await joinGroup(value);
+    setGroupDialog(null);
+    setGroupDialogValue('');
   };
 
   const addExpense = async () => {
@@ -197,8 +212,8 @@ export default function Home() {
             {!groups.length && <option value="">No groups yet</option>}
             {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </select>
-          <button style={styles.gbtn} onClick={createGroup}>+ New</button>
-          <button style={styles.gbtn} onClick={joinGroup}>Join</button>
+          <button style={styles.gbtn} onClick={() => openGroupDialog('create')}>+ New</button>
+          <button style={styles.gbtn} onClick={() => openGroupDialog('join')}>Join</button>
         </div>
         {currentGroup && <div style={styles.codeLine}>Invite code: <b>{currentGroup.join_code}</b></div>}
         {groupId && <div style={styles.addRow}>
@@ -231,6 +246,25 @@ export default function Home() {
           ))}
         </div>
         <div style={styles.total}>Total {inr(total)}</div>
+        {groupDialog && (
+          <div style={styles.dialogBackdrop}>
+            <form style={styles.dialog} onSubmit={submitGroupDialog}>
+              <div style={styles.dialogTitle}>{groupDialog === 'create' ? 'Create a group' : 'Join a group'}</div>
+              <input
+                autoFocus
+                style={styles.input2}
+                value={groupDialogValue}
+                onChange={(event) => setGroupDialogValue(event.target.value)}
+                placeholder={groupDialog === 'create' ? 'Group name' : 'Invite code'}
+                aria-label={groupDialog === 'create' ? 'Group name' : 'Invite code'}
+              />
+              <div style={styles.authRow}>
+                <button type="button" style={styles.authBtnAlt} onClick={() => setGroupDialog(null)}>Cancel</button>
+                <button type="submit" style={styles.authBtn}>{groupDialog === 'create' ? 'Create' : 'Join'}</button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </main>
   );
@@ -269,4 +303,7 @@ const styles = {
   itemAmount: { fontWeight: 800, fontSize: 15.5 },
   remove: { flex: 'none', width: 26, height: 26, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' },
   total: { textAlign: 'center', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--line)', fontWeight: 800, fontSize: 16 },
+  dialogBackdrop: { position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 16, background: 'rgba(13,27,62,.35)', zIndex: 10 },
+  dialog: { width: '100%', maxWidth: 360, background: 'var(--card)', borderRadius: 18, padding: 18, boxShadow: '0 20px 50px rgba(13,27,62,.25)' },
+  dialogTitle: { fontWeight: 800, fontSize: 17, marginBottom: 14 },
 };
