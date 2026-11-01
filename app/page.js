@@ -150,6 +150,39 @@ export default function Home() {
     setGroupDialogValue('');
   };
 
+  const addCustomExpense = async (event) => {
+    event.preventDefault();
+    const amount = Number(customAmount);
+    const percentages = customPercentages.split(',').map((value) => Number(value.trim()));
+    if (!customName.trim() || !Number.isFinite(amount) || amount <= 0 || percentages.length !== members.length || percentages.some((value) => !Number.isFinite(value) || value < 0) || Math.abs(percentages.reduce((sum, value) => sum + value, 0) - 100) > 0.01) {
+      setError(`Enter a name, positive amount, and ${members.length} percentages totaling 100 (for example: 40,60).`);
+      return;
+    }
+    const splitDetails = members.map((member, index) => ({
+      user_id: member.user_id,
+      percentage: percentages[index],
+      amount: Number((amount * percentages[index] / 100).toFixed(2)),
+    }));
+    const { data: row, error: insertError } = await supabase.from('expenses').insert({
+      user_id: session.user.id,
+      group_id: groupId,
+      name: customName.trim(),
+      paid_by: 'custom split',
+      amount,
+      split_details: splitDetails,
+    }).select().single();
+    if (insertError) {
+      setError(`Could not save custom expense: ${insertError.message}`);
+      return;
+    }
+    setExpenses((list) => [...list, row]);
+    setCustomDialog(false);
+    setCustomName('');
+    setCustomAmount('');
+    setCustomPercentages('');
+    setError('');
+  };
+
   const addExpense = async () => {
     const sentence = text.trim();
     if (!sentence || isAdding || !session || !groupId) return;
@@ -175,38 +208,6 @@ export default function Home() {
         created_at: new Date().toISOString(),
       };
 
-      const addCustomExpense = async (event) => {
-        event.preventDefault();
-        const amount = Number(customAmount);
-        const percentages = customPercentages.split(',').map((value) => Number(value.trim()));
-        if (!customName.trim() || !Number.isFinite(amount) || amount <= 0 || percentages.length !== members.length || percentages.some((value) => !Number.isFinite(value) || value < 0) || Math.abs(percentages.reduce((sum, value) => sum + value, 0) - 100) > 0.01) {
-          setError(`Enter a name, positive amount, and ${members.length} percentages totaling 100 (for example: 40,60).`);
-          return;
-        }
-        const splitDetails = members.map((member, index) => ({
-          user_id: member.user_id,
-          percentage: percentages[index],
-          amount: Number((amount * percentages[index] / 100).toFixed(2)),
-        }));
-        const { data: row, error: insertError } = await supabase.from('expenses').insert({
-          user_id: session.user.id,
-          group_id: groupId,
-          name: customName.trim(),
-          paid_by: 'custom split',
-          amount,
-          split_details: splitDetails,
-        }).select().single();
-        if (insertError) {
-          setError(`Could not save custom expense: ${insertError.message}`);
-          return;
-        }
-        setExpenses((list) => [...list, row]);
-        setCustomDialog(false);
-        setCustomName('');
-        setCustomAmount('');
-        setCustomPercentages('');
-        setError('');
-      };
       const { data: row, error: insertError } = await supabase.from('expenses')
         .insert({ user_id: session.user.id, group_id: groupId, name: expense.name, paid_by: expense.paid_by, amount: expense.amount })
         .select()
