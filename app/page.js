@@ -306,6 +306,15 @@ export default function Home() {
     setExpenses((list) => list.filter((expense) => expense.id !== id));
   };
 
+  const themeMap = {
+    'Ocean Blue': { page: '#dff4ff', surface: '#c9edff', panel: '#eaf9ff', item: '#d5f2ff', text: '#0d1b3e', muted: '#536b8e', line: '#b7dced', accent: '#1c5fd4', colors: ['#1c5fd4', '#26a6d1', '#168aad', '#2f9e75', '#d4a72c', '#7139b7', '#d64b78', '#566176'] },
+    Midnight: { page: '#0c1428', surface: '#17233d', panel: '#203252', item: '#263b5c', text: '#f5f8ff', muted: '#b5c4dd', line: '#3b5072', accent: '#9dc7ff', colors: ['#9dc7ff', '#64d8cb', '#c084fc', '#fbbf24', '#fb7185', '#60a5fa', '#a7f3d0', '#e5e7eb'] },
+    Galaxy: { page: '#eadfff', surface: '#ddcaff', panel: '#f3edff', item: '#e7d8ff', text: '#24133f', muted: '#725a91', line: '#c8b3e6', accent: '#7139b7', colors: ['#7139b7', '#d64b78', '#f078b5', '#5b4bb7', '#f0a35e', '#38a3a5', '#9d4edd', '#8b5cf6'] },
+    Arctic: { page: '#eaf8ff', surface: '#d6f1ff', panel: '#f5fcff', item: '#e0f6ff', text: '#12334a', muted: '#53758b', line: '#b9dbe9', accent: '#2588b8', colors: ['#2588b8', '#4cc9f0', '#4895ef', '#56c596', '#f4b942', '#7b61ff', '#ef709d', '#53758b'] },
+    Sunset: { page: '#ffe1d2', surface: '#ffd0bc', panel: '#fff0e8', item: '#ffe0d2', text: '#4b2017', muted: '#8b6559', line: '#edc0ae', accent: '#d8663b', colors: ['#d8663b', '#ef8a4c', '#f2b134', '#d64b78', '#a6537c', '#8b5cf6', '#e76f51', '#9c6644'] },
+    Minimal: { page: '#f5f6f8', surface: '#e8ebf0', panel: '#ffffff', item: '#eef1f5', text: '#263044', muted: '#687286', line: '#d4dae4', accent: '#566176', colors: ['#566176', '#78909c', '#90a4ae', '#607d8b', '#8d99ae', '#718096', '#9aa5b1', '#475569'] },
+  };
+  const currentTheme = themeMap[theme];
   const total = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const currentGroup = groups.find((group) => group.id === groupId);
   const settlementRows = expenses.flatMap((expense) => (Array.isArray(expense.split_details) ? expense.split_details : [])
@@ -318,7 +327,7 @@ export default function Home() {
   }, {});
   const chartRows = Object.entries(expenseChart).sort(([, a], [, b]) => b - a).slice(0, 8);
   const chartMax = Math.max(...chartRows.map(([, amount]) => amount), 1);
-  const chartColors = ['#1c5fd4', '#26a6d1', '#7139b7', '#d8663b', '#2f9e75', '#d4a72c', '#d64b78', '#566176'];
+  const chartColors = currentTheme.colors;
   let pieStart = 0;
   const pieSegments = chartRows.map(([, amount], index) => {
     const end = pieStart + (amount / Math.max(total, 1)) * 360;
@@ -326,16 +335,6 @@ export default function Home() {
     pieStart = end;
     return segment;
   });
-  const themeMap = {
-    'Ocean Blue': { page: '#dff4ff', surface: '#c9edff', panel: '#eaf9ff', item: '#d5f2ff', text: '#0d1b3e', muted: '#536b8e', line: '#b7dced', accent: '#1c5fd4' },
-    Midnight: { page: '#0c1428', surface: '#17233d', panel: '#203252', item: '#263b5c', text: '#f5f8ff', muted: '#b5c4dd', line: '#3b5072', accent: '#9dc7ff' },
-    Galaxy: { page: '#eadfff', surface: '#ddcaff', panel: '#f3edff', item: '#e7d8ff', text: '#24133f', muted: '#725a91', line: '#c8b3e6', accent: '#7139b7' },
-    Arctic: { page: '#eaf8ff', surface: '#d6f1ff', panel: '#f5fcff', item: '#e0f6ff', text: '#12334a', muted: '#53758b', line: '#b9dbe9', accent: '#2588b8' },
-    Sunset: { page: '#ffe1d2', surface: '#ffd0bc', panel: '#fff0e8', item: '#ffe0d2', text: '#4b2017', muted: '#8b6559', line: '#edc0ae', accent: '#d8663b' },
-    Minimal: { page: '#f5f6f8', surface: '#e8ebf0', panel: '#ffffff', item: '#eef1f5', text: '#263044', muted: '#687286', line: '#d4dae4', accent: '#566176' },
-  };
-  const currentTheme = themeMap[theme];
-
   if (checking) return <main style={styles.page}><div style={styles.card}>Loading…</div></main>;
 
   if (!session) {
