@@ -328,6 +328,13 @@ export default function Home() {
   const chartRows = Object.entries(expenseChart).sort(([, a], [, b]) => b - a).slice(0, 8);
   const chartMax = Math.max(...chartRows.map(([, amount]) => amount), 1);
   const chartColors = currentTheme.colors;
+  const trendRows = [...expenses].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0)).slice(-8);
+  const trendMax = Math.max(...trendRows.map((expense) => Number(expense.amount || 0)), 1);
+  const trendPoints = trendRows.map((expense, index) => {
+    const x = trendRows.length === 1 ? 160 : 16 + (index / (trendRows.length - 1)) * 288;
+    const y = 124 - (Number(expense.amount || 0) / trendMax) * 104;
+    return { x, y, amount: Number(expense.amount || 0), name: expense.name };
+  });
   let pieStart = 0;
   const pieSegments = chartRows.map(([, amount], index) => {
     const end = pieStart + (amount / Math.max(total, 1)) * 360;
@@ -417,6 +424,18 @@ export default function Home() {
               </div>
             </div>}
             {chartRows.length > 0 && <div style={styles.analysis}>Your largest expense is <b>{chartRows[0][0]}</b> at <b>{inr(chartRows[0][1])}</b>. This is {Math.round(chartRows[0][1] / total * 100)}% of your recorded spending.</div>}
+            {trendRows.length > 0 && <div style={styles.lineGraph}>
+              <div style={styles.chartTitle}>Spending trend</div>
+              <svg viewBox="0 0 320 150" role="img" aria-label="Line graph of expenses over time" style={styles.chartSvg}>
+                <line x1="16" y1="124" x2="304" y2="124" stroke="var(--line)" strokeWidth="1" />
+                <line x1="16" y1="72" x2="304" y2="72" stroke="var(--line)" strokeWidth="1" strokeDasharray="3 4" />
+                <line x1="16" y1="20" x2="304" y2="20" stroke="var(--line)" strokeWidth="1" strokeDasharray="3 4" />
+                <polyline fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={trendPoints.map((point) => `${point.x},${point.y}`).join(' ')} />
+                {trendPoints.map((point, index) => <circle key={`${point.name}-${index}`} cx={point.x} cy={point.y} r="4" fill="var(--accent)" stroke="var(--panel)" strokeWidth="2"><title>{point.name}: {inr(point.amount)}</title></circle>)}
+              </svg>
+              <div style={styles.lineLabels}>{trendPoints.map((point, index) => <span key={`label-${point.name}-${index}`}>{index + 1}</span>)}</div>
+              <div style={styles.lineHint}>Each point represents an expense in chronological order.</div>
+            </div>}
           </div>
         )}
         {activeView === 'My Groups' && <div style={styles.groupBar}>
@@ -600,5 +619,9 @@ const styles = {
   chartLabel: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 },
   chartTrack: { height: 10, borderRadius: 99, background: 'var(--item)', overflow: 'hidden' },
   chartBar: { height: '100%', borderRadius: 99, background: 'var(--accent)' },
+  lineGraph: { marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--line)' },
+  chartSvg: { width: '100%', height: 'auto', display: 'block', overflow: 'visible' },
+  lineLabels: { display: 'flex', justifyContent: 'space-between', padding: '0 5%', color: 'var(--muted)', fontSize: 10 },
+  lineHint: { color: 'var(--muted)', fontSize: 11, marginTop: 8 },
   analysis: { marginTop: 16, padding: 10, borderRadius: 10, background: 'var(--item)', color: 'var(--muted)', fontSize: 12.5, lineHeight: 1.5 },
 };
