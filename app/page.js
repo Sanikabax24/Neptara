@@ -318,6 +318,14 @@ export default function Home() {
   }, {});
   const chartRows = Object.entries(expenseChart).sort(([, a], [, b]) => b - a).slice(0, 8);
   const chartMax = Math.max(...chartRows.map(([, amount]) => amount), 1);
+  const chartColors = ['#1c5fd4', '#26a6d1', '#7139b7', '#d8663b', '#2f9e75', '#d4a72c', '#d64b78', '#566176'];
+  let pieStart = 0;
+  const pieSegments = chartRows.map(([, amount], index) => {
+    const end = pieStart + (amount / Math.max(total, 1)) * 360;
+    const segment = `${chartColors[index % chartColors.length]} ${pieStart}deg ${end}deg`;
+    pieStart = end;
+    return segment;
+  });
   const themeMap = {
     'Ocean Blue': { page: '#dff4ff', surface: '#c9edff', panel: '#eaf9ff', item: '#d5f2ff', text: '#0d1b3e', muted: '#536b8e', line: '#b7dced', accent: '#1c5fd4' },
     Midnight: { page: '#0c1428', surface: '#17233d', panel: '#203252', item: '#263b5c', text: '#f5f8ff', muted: '#b5c4dd', line: '#3b5072', accent: '#9dc7ff' },
@@ -397,9 +405,18 @@ export default function Home() {
           <div style={styles.infoPanel}>
             <div style={styles.sectionTitle}>Statistics</div>
             <div style={styles.statsGrid}><div style={styles.statsGridItem}><b>{inr(total)}</b><span>Total spent</span></div><div style={styles.statsGridItem}><b>{expenses.length}</b><span>Expenses</span></div><div style={styles.statsGridItem}><b>{expenses.length ? inr(total / expenses.length) : inr(0)}</b><span>Average expense</span></div></div>
-            <div style={styles.chartTitle}>Spending by expense</div>
             {!chartRows.length && <div style={styles.empty}>Add expenses to see your chart.</div>}
-            {chartRows.map(([name, amount]) => <div style={styles.chartRow} key={name}><div style={styles.chartLabel}><span>{name}</span><b>{inr(amount)}</b></div><div style={styles.chartTrack}><div style={{ ...styles.chartBar, width: `${Math.max(4, amount / chartMax * 100)}%` }} /></div></div>)}
+            {chartRows.length > 0 && <div style={styles.graphGrid}>
+              <div>
+                <div style={styles.chartTitle}>Spending breakdown</div>
+                <div style={{ ...styles.pieChart, background: `conic-gradient(${pieSegments.join(', ')})` }}><div style={styles.pieHole}>{inr(total)}</div></div>
+                <div style={styles.legend}>{chartRows.map(([name, amount], index) => <div style={styles.legendRow} key={`legend-${name}`}><span style={{ ...styles.legendDot, background: chartColors[index % chartColors.length] }} /><span>{name}</span><b>{Math.round(amount / total * 100)}%</b></div>)}</div>
+              </div>
+              <div>
+                <div style={styles.chartTitle}>Bar graph</div>
+                {chartRows.map(([name, amount], index) => <div style={styles.chartRow} key={name}><div style={styles.chartLabel}><span>{name}</span><b>{inr(amount)}</b></div><div style={styles.chartTrack}><div style={{ ...styles.chartBar, background: chartColors[index % chartColors.length], width: `${Math.max(4, amount / chartMax * 100)}%` }} /></div></div>)}
+              </div>
+            </div>}
             {chartRows.length > 0 && <div style={styles.analysis}>Your largest expense is <b>{chartRows[0][0]}</b> at <b>{inr(chartRows[0][1])}</b>. This is {Math.round(chartRows[0][1] / total * 100)}% of your recorded spending.</div>}
           </div>
         )}
@@ -574,6 +591,12 @@ const styles = {
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 18 },
   statsGridItem: { background: 'var(--item)', borderRadius: 10, padding: 8 },
   chartTitle: { fontSize: 14, fontWeight: 800, marginBottom: 10 },
+  graphGrid: { display: 'grid', gridTemplateColumns: 'minmax(130px, .9fr) minmax(0, 1.1fr)', gap: 16, alignItems: 'start' },
+  pieChart: { width: 132, height: 132, borderRadius: '50%', display: 'grid', placeItems: 'center', margin: '4px auto 12px' },
+  pieHole: { width: 74, height: 74, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--panel)', color: 'var(--text)', fontSize: 12, fontWeight: 800, textAlign: 'center', padding: 6 },
+  legend: { display: 'flex', flexDirection: 'column', gap: 5 },
+  legendRow: { display: 'grid', gridTemplateColumns: '9px 1fr auto', alignItems: 'center', gap: 5, color: 'var(--muted)', fontSize: 10.5 },
+  legendDot: { width: 8, height: 8, borderRadius: '50%' },
   chartRow: { marginBottom: 10 },
   chartLabel: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, marginBottom: 4 },
   chartTrack: { height: 10, borderRadius: 99, background: 'var(--item)', overflow: 'hidden' },
