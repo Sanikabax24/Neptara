@@ -111,7 +111,7 @@ export default function Home() {
   };
 
   const signOut = async () => {
-    const { error: signOutError } = await supabase.auth.signOut();
+    const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
     if (signOutError) setError(`Could not sign out: ${signOutError.message}`);
   };
 
