@@ -17,31 +17,8 @@ export default function Home() {
   const [authMsg, setAuthMsg] = useState('');
   const [error, setError] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const isSupabaseConfigured = Boolean(supabase);
-
   useEffect(() => {
-    if (!supabase) {
-      setAuthMsg('Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local.');
-      setChecking(false);
-      return undefined;
-    }
-
-    let mounted = true;
-    supabase.auth.getSession().then(({ data, error: sessionError }) => {
-      if (!mounted) return;
-      if (sessionError) setAuthMsg(sessionError.message);
-      setSession(data.session);
-      setChecking(false);
-    });
-
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (mounted) setSession(nextSession);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.subscription.unsubscribe();
-    };
+    setChecking(false);
   }, []);
 
   const loadGroups = async () => {
@@ -98,32 +75,6 @@ export default function Home() {
     return () => { active = false; };
   }, [session, groupId]);
 
-  const signUp = async () => {
-    if (!supabase) return;
-    setAuthMsg('');
-    if (!email.trim() || password.length < 6) {
-      setAuthMsg('Enter a valid email and a password with at least 6 characters.');
-      return;
-    }
-    const { data, error: signUpError } = await supabase.auth.signUp({ email: email.trim(), password });
-    if (!signUpError && data.session) {
-      setAuthMsg('Account created — you are signed in!');
-      return;
-    }
-    if (signUpError?.message?.toLowerCase().includes('rate limit')) {
-      setAuthMsg('Supabase email limit reached. If this account already exists, use Sign in. You can also use the demo account while the limit resets.');
-      return;
-    }
-    setAuthMsg(signUpError ? signUpError.message : 'Check your email to confirm your account, then sign in.');
-  };
-
-  const signIn = async () => {
-    if (!supabase) return;
-    setAuthMsg('');
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-    if (signInError) setAuthMsg(signInError.message);
-  };
-
   const signInDemo = () => {
     if (!email.trim() || password.length < 6) {
       setAuthMsg('Enter an email and a password with at least 6 characters.');
@@ -134,11 +85,7 @@ export default function Home() {
   };
 
   const signOut = () => {
-    if (session?.demo) {
-      setSession(null);
-      return;
-    }
-    supabase?.auth.signOut();
+    setSession(null);
   };
 
   const createGroup = async () => {
@@ -264,18 +211,10 @@ export default function Home() {
           <div style={styles.header}>
             <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
           </div>
-          <p style={styles.help}>
-            {isSupabaseConfigured
-              ? 'Sign in to see your expenses on any device.'
-              : 'Add your Supabase project credentials to enable login and cloud storage.'}
-          </p>
+          <p style={styles.help}>Use a local demo account. No email is sent and no real account is created.</p>
           <input style={styles.input2} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" />
           <input style={styles.input2} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password (6+ characters)" />
-          <div style={styles.authRow}>
-            <button style={styles.authBtn} onClick={signUp} disabled={!isSupabaseConfigured}>Sign up</button>
-            <button style={styles.authBtnAlt} onClick={signIn} disabled={!isSupabaseConfigured}>Sign in</button>
-          </div>
-          <button style={styles.demoBtn} onClick={signInDemo}>Use demo account</button>
+          <button style={styles.authBtn} onClick={signInDemo}>Continue with demo account</button>
           {authMsg && <div style={styles.message} role="alert">{authMsg}</div>}
         </div>
       </main>
