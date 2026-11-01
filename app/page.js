@@ -35,7 +35,12 @@ export default function Home() {
   useEffect(() => {
     const savedPicture = window.localStorage.getItem('splitsmart-profile-picture');
     if (savedPicture) setProfilePicture(savedPicture);
+    const savedTheme = window.localStorage.getItem('splitsmart-theme');
+    if (savedTheme) setTheme(savedTheme);
   }, []);
+  useEffect(() => {
+    window.localStorage.setItem('splitsmart-theme', theme);
+  }, [theme]);
   useEffect(() => {
     if (!supabase) {
       setAuthMsg('Authentication is not configured.');
