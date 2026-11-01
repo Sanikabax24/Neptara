@@ -354,12 +354,12 @@ export default function Home() {
           <div style={styles.header}>
             <div style={styles.brand}><img src="/neptara-logo.png" alt="Neptara logo" style={styles.logo} /><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
           </div>
-          <p style={styles.help}>Enter any details for instant login. No email is sent or verified.</p>
-          <input style={styles.input2} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" aria-label="Your name" />
-          <input style={styles.input2} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Any email (not verified)" />
-          <input style={styles.input2} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Any password (6+ characters)" />
+          <p style={styles.authHelp}>Enter any details for instant login. No email is sent or verified.</p>
+          <input style={styles.authInput} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" aria-label="Your name" />
+          <input style={styles.authInput} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Any email (not verified)" />
+          <input style={styles.authInput} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Any password (6+ characters)" />
           <button style={styles.authBtn} onClick={signInDemo}>Continue with demo account</button>
-          {authMsg && <div style={styles.message} role="alert">{authMsg}</div>}
+          {authMsg && <div style={styles.authMessage} role="alert">{authMsg}</div>}
         </div>
       </main>
     );
@@ -541,7 +541,10 @@ export default function Home() {
 const styles = {
   page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 48px', color: 'var(--text)' },
   authPage: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'linear-gradient(145deg, #d9f3ff 0%, #72c9f5 48%, #2874d8 100%)' },
-  authCard: { width: '100%', maxWidth: 420, background: 'rgba(239, 250, 255, .96)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13, 61, 130, .45)', border: '1px solid rgba(255,255,255,.8)', padding: 20 },
+  authCard: { width: '100%', maxWidth: 420, background: 'rgba(239, 250, 255, .96)', color: '#000', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13, 61, 130, .45)', border: '1px solid rgba(255,255,255,.8)', padding: 20 },
+  authHelp: { color: '#000', fontSize: 14, marginBottom: 16 },
+  authMessage: { marginTop: 12, fontSize: 13, color: '#000' },
+  authInput: { width: '100%', border: '1px solid #9aa8b5', borderRadius: 12, padding: '12px 14px', fontSize: 15, outline: 'none', background: '#fff', color: '#000', marginBottom: 10, boxSizing: 'border-box' },
   nav: { width: '100%', maxWidth: 420, display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 0 10px' },
   navBtn: { flex: 'none', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px', background: 'var(--panel)', color: 'var(--text)', fontSize: 11, fontWeight: 800, cursor: 'pointer' },
   navBtnActive: { background: 'var(--accent)', color: '#fff' },
