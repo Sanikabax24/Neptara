@@ -18,21 +18,28 @@ export default function Home() {
   const [error, setError] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   useEffect(() => {
-    setChecking(false);
+    if (!supabase) {
+      setAuthMsg('Authentication is not configured.');
+      setChecking(false);
+      return undefined;
+    }
+    let mounted = true;
+    supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!mounted) return;
+      if (sessionError) setAuthMsg(sessionError.message);
+      setSession(data.session);
+      setChecking(false);
+    });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (mounted) setSession(nextSession);
+    });
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
   }, []);
 
   const loadGroups = async () => {
-    if (session?.demo) {
-      try {
-        const demoGroups = JSON.parse(localStorage.getItem('splitsmart.demo.groups') || '[]');
-        setGroups(demoGroups);
-        setGroupId((current) => demoGroups.some((group) => group.id === current) ? current : demoGroups[0]?.id || '');
-      } catch {
-        setGroups([]);
-        setGroupId('');
-      }
-      return;
-    }
     const { data, error: loadError } = await supabase.from('groups').select('*').order('created_at');
     if (loadError) {
       setError(`Could not load groups: ${loadError.message}`);
@@ -56,15 +63,6 @@ export default function Home() {
       setExpenses([]);
       return;
     }
-    if (session.demo) {
-      try {
-        const allExpenses = JSON.parse(localStorage.getItem('splitsmart.demo.expenses') || '[]');
-        setExpenses(allExpenses.filter((expense) => expense.group_id === groupId));
-      } catch {
-        setExpenses([]);
-      }
-      return;
-    }
     let active = true;
     supabase.from('expenses').select('*').eq('group_id', groupId).order('created_at')
       .then(({ data, error: loadError }) => {
@@ -75,30 +73,21 @@ export default function Home() {
     return () => { active = false; };
   }, [session, groupId]);
 
-  const signInDemo = () => {
-    if (!email.trim() || password.length < 6) {
-      setAuthMsg('Enter an email and a password with at least 6 characters.');
-      return;
-    }
+  const signInDemo = async () => {
+    if (!supabase) return;
     setAuthMsg('');
-    setSession({ demo: true, user: { id: 'demo-user', email: email.trim() } });
+    const { error: signInError } = await supabase.auth.signInAnonymously();
+    if (signInError) setAuthMsg(`Could not start instant login: ${signInError.message}`);
   };
 
-  const signOut = () => {
-    setSession(null);
+  const signOut = async () => {
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) setError(`Could not sign out: ${signOutError.message}`);
   };
 
   const createGroup = async () => {
     const name = window.prompt('Name your group (for example, Goa Trip):')?.trim();
     if (!name) return;
-    if (session.demo) {
-      const group = { id: 'demo-group-' + Date.now(), name, join_code: Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: new Date().toISOString() };
-      const nextGroups = [...groups, group];
-      localStorage.setItem('splitsmart.demo.groups', JSON.stringify(nextGroups));
-      setGroups(nextGroups);
-      setGroupId(group.id);
-      return;
-    }
     const { data: group, error: createError } = await supabase.from('groups')
       .insert({ name, created_by: session.user.id }).select().single();
     if (createError) {
@@ -118,15 +107,6 @@ export default function Home() {
   const joinGroup = async () => {
     const code = window.prompt('Enter the group invite code:')?.trim();
     if (!code) return;
-    if (session.demo) {
-      const group = groups.find((candidate) => candidate.join_code === code.toUpperCase());
-      if (!group) {
-        setError('No demo group matches that invite code.');
-        return;
-      }
-      setGroupId(group.id);
-      return;
-    }
     const { data: joinedId, error: joinError } = await supabase.rpc('join_group', { code });
     if (joinError) {
       setError(`Could not join group: ${joinError.message}`);
@@ -160,19 +140,12 @@ export default function Home() {
         emoji: '🧾',
         created_at: new Date().toISOString(),
       };
-      if (session.demo) {
-        const allExpenses = JSON.parse(localStorage.getItem('splitsmart.demo.expenses') || '[]');
-        const nextExpenses = [...allExpenses, expense];
-        localStorage.setItem('splitsmart.demo.expenses', JSON.stringify(nextExpenses));
-        setExpenses(nextExpenses.filter((item) => item.group_id === groupId));
-      } else {
-        const { data: row, error: insertError } = await supabase.from('expenses')
-          .insert({ user_id: session.user.id, group_id: groupId, name: expense.name, paid_by: expense.paid_by, amount: expense.amount })
-          .select()
-          .single();
-        if (insertError) throw new Error(`Could not save expense: ${insertError.message}`);
-        setExpenses((list) => [...list, row]);
-      }
+      const { data: row, error: insertError } = await supabase.from('expenses')
+        .insert({ user_id: session.user.id, group_id: groupId, name: expense.name, paid_by: expense.paid_by, amount: expense.amount })
+        .select()
+        .single();
+      if (insertError) throw new Error(`Could not save expense: ${insertError.message}`);
+      setExpenses((list) => [...list, row]);
       setText('');
     } catch (addError) {
       setError(addError.message);
@@ -184,13 +157,6 @@ export default function Home() {
   const removeExpense = async (id) => {
     if (!supabase || !session) return;
     setError('');
-    if (session.demo) {
-      const allExpenses = JSON.parse(localStorage.getItem('splitsmart.demo.expenses') || '[]');
-      const nextExpenses = allExpenses.filter((expense) => expense.id !== id);
-      localStorage.setItem('splitsmart.demo.expenses', JSON.stringify(nextExpenses));
-      setExpenses(nextExpenses.filter((expense) => expense.group_id === groupId));
-      return;
-    }
     const { error: deleteError } = await supabase.from('expenses').delete().eq('id', id);
     if (deleteError) {
       setError(`Could not remove expense: ${deleteError.message}`);
@@ -212,8 +178,6 @@ export default function Home() {
             <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
           </div>
           <p style={styles.help}>Use a local demo account. No email is sent and no real account is created.</p>
-          <input style={styles.input2} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" />
-          <input style={styles.input2} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password (6+ characters)" />
           <button style={styles.authBtn} onClick={signInDemo}>Continue with demo account</button>
           {authMsg && <div style={styles.message} role="alert">{authMsg}</div>}
         </div>
