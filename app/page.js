@@ -12,6 +12,8 @@ export default function Home() {
   const [groups, setGroups] = useState([]);
   const [groupId, setGroupId] = useState('');
   const [text, setText] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [authMsg, setAuthMsg] = useState('');
   const [error, setError] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -75,6 +77,10 @@ export default function Home() {
 
   const signInDemo = async () => {
     if (!supabase) return;
+    if (!email.trim() || password.length < 6) {
+      setAuthMsg('Enter any email and a password with at least 6 characters. No email will be sent.');
+      return;
+    }
     setAuthMsg('');
     const { error: signInError } = await supabase.auth.signInAnonymously();
     if (signInError) setAuthMsg(`Could not start instant login: ${signInError.message}`);
@@ -88,20 +94,13 @@ export default function Home() {
   const createGroup = async (name) => {
     name = name.trim();
     if (!name) return;
-    const { data: group, error: createError } = await supabase.from('groups')
-      .insert({ name, created_by: session.user.id }).select().single();
+    const { data: groupIdFromRpc, error: createError } = await supabase.rpc('create_group', { group_name: name });
     if (createError) {
       setError(`Could not create group: ${createError.message}`);
       return;
     }
-    const { error: memberError } = await supabase.from('group_members')
-      .insert({ group_id: group.id, user_id: session.user.id });
-    if (memberError) {
-      setError(`Could not add group membership: ${memberError.message}`);
-      return;
-    }
     await loadGroups();
-    setGroupId(group.id);
+    setGroupId(groupIdFromRpc);
   };
 
   const joinGroup = async (code) => {
@@ -192,7 +191,9 @@ export default function Home() {
           <div style={styles.header}>
             <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
           </div>
-          <p style={styles.help}>Use a local demo account. No email is sent and no real account is created.</p>
+          <p style={styles.help}>Enter any details for instant login. No email is sent and no real account is created.</p>
+          <input style={styles.input2} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Any email (not verified)" />
+          <input style={styles.input2} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Any password (6+ characters)" />
           <button style={styles.authBtn} onClick={signInDemo}>Continue with demo account</button>
           {authMsg && <div style={styles.message} role="alert">{authMsg}</div>}
         </div>
