@@ -20,10 +20,14 @@ export default function Home() {
   const [isAdding, setIsAdding] = useState(false);
   const [groupDialog, setGroupDialog] = useState(null);
   const [groupDialogValue, setGroupDialogValue] = useState('');
-  const [customDialog, setCustomDialog] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customAmount, setCustomAmount] = useState('');
-  const [customPercentages, setCustomPercentages] = useState('');
+  const [customPeopleCount, setCustomPeopleCount] = useState(2);
+  const [customPeople, setCustomPeople] = useState([
+    { name: '', percentage: '', reason: '' },
+    { name: '', percentage: '', reason: '' },
+  ]);
+  const [showCustomSplit, setShowCustomSplit] = useState(false);
   useEffect(() => {
     if (!supabase) {
       setAuthMsg('Authentication is not configured.');
@@ -153,13 +157,15 @@ export default function Home() {
   const addCustomExpense = async (event) => {
     event.preventDefault();
     const amount = Number(customAmount);
-    const percentages = customPercentages.split(',').map((value) => Number(value.trim()));
-    if (!customName.trim() || !Number.isFinite(amount) || amount <= 0 || percentages.length !== members.length || percentages.some((value) => !Number.isFinite(value) || value < 0) || Math.abs(percentages.reduce((sum, value) => sum + value, 0) - 100) > 0.01) {
-      setError(`Enter a name, positive amount, and ${members.length} percentages totaling 100 (for example: 40,60).`);
+    const percentages = customPeople.map((person) => Number(person.percentage));
+    if (!customName.trim() || !Number.isFinite(amount) || amount <= 0 || customPeople.some((person) => !person.name.trim() || !Number.isInteger(Number(person.percentage)) || Number(person.percentage) < 0) || percentages.reduce((sum, value) => sum + value, 0) !== 100) {
+      setError('Enter a name, positive amount, every person name, whole-number percentages, and percentages totaling exactly 100.');
       return;
     }
-    const splitDetails = members.map((member, index) => ({
-      user_id: member.user_id,
+    const splitDetails = customPeople.map((person, index) => ({
+      user_id: members[index]?.user_id || null,
+      name: person.name.trim(),
+      reason: person.reason.trim(),
       percentage: percentages[index],
       amount: Number((amount * percentages[index] / 100).toFixed(2)),
     }));
@@ -176,11 +182,25 @@ export default function Home() {
       return;
     }
     setExpenses((list) => [...list, row]);
-    setCustomDialog(false);
+    setShowCustomSplit(false);
     setCustomName('');
     setCustomAmount('');
-    setCustomPercentages('');
+    setCustomPeopleCount(2);
+    setCustomPeople([
+      { name: '', percentage: '', reason: '' },
+      { name: '', percentage: '', reason: '' },
+    ]);
     setError('');
+  };
+
+  const updateCustomPeopleCount = (value) => {
+    const count = Math.max(2, Math.min(20, Number(value) || 2));
+    setCustomPeopleCount(count);
+    setCustomPeople((current) => Array.from({ length: count }, (_, index) => current[index] || { name: '', percentage: '', reason: '' }));
+  };
+
+  const updateCustomPerson = (index, field, value) => {
+    setCustomPeople((current) => current.map((person, personIndex) => personIndex === index ? { ...person, [field]: value } : person));
   };
 
   const addExpense = async () => {
@@ -288,7 +308,30 @@ export default function Home() {
             {isAdding ? '…' : '+'}
           </button>
         </div>}
-        {groupId && <button style={styles.customBtn} onClick={() => { setCustomDialog(true); setError(''); }}>+ Custom split</button>}
+        {groupId && <button style={styles.customBtn} onClick={() => { setShowCustomSplit((visible) => !visible); setError(''); }}>+ Custom split</button>}
+        {groupId && showCustomSplit && (
+          <form style={styles.customPanel} onSubmit={addCustomExpense}>
+            <div style={styles.dialogTitle}>Custom expense split</div>
+            <input style={styles.input2} value={customName} onChange={(event) => setCustomName(event.target.value)} placeholder="Expense name" aria-label="Expense name" />
+            <input style={styles.input2} type="number" min="1" step="1" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} placeholder="Total amount" aria-label="Total amount" />
+            <label style={styles.fieldLabel}>How many people are splitting this?</label>
+            <input style={styles.input2} type="number" min="2" max="20" step="1" value={customPeopleCount} onChange={(event) => updateCustomPeopleCount(event.target.value)} aria-label="Number of people" />
+            <div style={styles.customPeopleList}>
+              {customPeople.map((person, index) => (
+                <div style={styles.personBox} key={index}>
+                  <div style={styles.personLabel}>Person {index + 1}{members[index] ? ` · ${members[index].user_id === session.user.id ? 'You' : 'Group member'}` : ''}</div>
+                  <input style={styles.input2} value={person.name} onChange={(event) => updateCustomPerson(index, 'name', event.target.value)} placeholder="Person name" aria-label={`Person ${index + 1} name`} />
+                  <div style={styles.splitInputs}>
+                    <input style={styles.percentInput} type="number" min="0" max="100" step="1" value={person.percentage} onChange={(event) => updateCustomPerson(index, 'percentage', event.target.value)} placeholder="%" aria-label={`Person ${index + 1} percentage`} />
+                    <input style={styles.reasonInput} value={person.reason} onChange={(event) => updateCustomPerson(index, 'reason', event.target.value)} placeholder="Reason for this split" aria-label={`Person ${index + 1} reason`} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={styles.percentTotal}>Total: {customPeople.reduce((sum, person) => sum + (Number(person.percentage) || 0), 0)}%</div>
+            <button type="submit" style={styles.authBtn}>Save custom split</button>
+          </form>
+        )}
         {!groupId && <div style={styles.empty}>Create a group or join one with an invite code.</div>}
         {error && <div style={styles.error} role="alert">{error}</div>}
         <div style={styles.list}>
@@ -325,21 +368,6 @@ export default function Home() {
             </form>
           </div>
         )}
-        {customDialog && (
-          <div style={styles.dialogBackdrop}>
-            <form style={styles.dialog} onSubmit={addCustomExpense}>
-              <div style={styles.dialogTitle}>Custom expense split</div>
-              <input style={styles.input2} value={customName} onChange={(event) => setCustomName(event.target.value)} placeholder="Expense name" aria-label="Expense name" />
-              <input style={styles.input2} type="number" min="0.01" step="0.01" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} placeholder="Total amount" aria-label="Total amount" />
-              <input style={styles.input2} value={customPercentages} onChange={(event) => setCustomPercentages(event.target.value)} placeholder={`Percentages in order: ${members.map((_, index) => index + 1).join(',')}`} aria-label="Percentages" />
-              <div style={styles.dialogHint}>Enter one percentage per person. They must total 100.</div>
-              <div style={styles.authRow}>
-                <button type="button" style={styles.authBtnAlt} onClick={() => setCustomDialog(false)}>Cancel</button>
-                <button type="submit" style={styles.authBtn}>Save split</button>
-              </div>
-            </form>
-          </div>
-        )}
       </div>
     </main>
   );
@@ -347,7 +375,7 @@ export default function Home() {
 
 const styles = {
   page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 48px' },
-  card: { width: '100%', maxWidth: 420, background: 'var(--card)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid var(--line)', padding: 20, marginTop: 12 },
+  card: { width: '100%', maxWidth: 420, background: '#dff4ff', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid #b9e4f7', padding: 20, marginTop: 12 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   brand: { display: 'flex', alignItems: 'center', gap: 10 },
   logo: { width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 18, background: 'linear-gradient(135deg, var(--blue), var(--cyan))' },
@@ -369,6 +397,15 @@ const styles = {
   memberTitle: { fontSize: 13, fontWeight: 800, marginBottom: 6 },
   memberRow: { color: 'var(--muted)', fontSize: 12.5, lineHeight: 1.6 },
   customBtn: { width: '100%', border: '1px dashed var(--blue)', borderRadius: 12, padding: 10, marginBottom: 14, color: 'var(--blue)', fontWeight: 800, background: '#fff', cursor: 'pointer' },
+  customPanel: { background: 'rgba(255,255,255,.62)', border: '1px solid #b9e4f7', borderRadius: 16, padding: 14, marginBottom: 14 },
+  fieldLabel: { display: 'block', color: 'var(--muted)', fontSize: 12.5, fontWeight: 700, marginBottom: 6 },
+  customPeopleList: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 },
+  personBox: { background: '#fff', border: '1px solid #b9e4f7', borderRadius: 12, padding: 10 },
+  personLabel: { color: 'var(--ink)', fontSize: 13, fontWeight: 800, marginBottom: 8 },
+  splitInputs: { display: 'flex', gap: 8 },
+  percentInput: { width: 76, border: '1px solid var(--line)', borderRadius: 10, padding: '10px 8px', fontSize: 14, outline: 'none' },
+  reasonInput: { flex: 1, minWidth: 0, border: '1px solid var(--line)', borderRadius: 10, padding: '10px 8px', fontSize: 14, outline: 'none' },
+  percentTotal: { color: 'var(--blue)', fontSize: 13, fontWeight: 800, marginBottom: 10 },
   dialogHint: { color: 'var(--muted)', fontSize: 12, margin: '-4px 0 10px' },
   addBtn: { flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
   error: { color: '#b42318', fontSize: 13, margin: '-4px 0 14px' },
