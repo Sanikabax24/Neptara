@@ -10,6 +10,7 @@ export default function Home() {
   const [checking, setChecking] = useState(true);
   const [expenses, setExpenses] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [groupExpenses, setGroupExpenses] = useState({});
   const [members, setMembers] = useState([]);
   const [groupId, setGroupId] = useState('');
   const [text, setText] = useState('');
@@ -76,11 +77,34 @@ export default function Home() {
   useEffect(() => {
     if (!session) {
       setGroups([]);
+      setGroupExpenses({});
       setGroupId('');
       return;
     }
     loadGroups();
   }, [session]);
+
+  useEffect(() => {
+    if (!session || !groups.length) {
+      setGroupExpenses({});
+      return;
+    }
+    let active = true;
+    const groupIds = groups.map((group) => group.id);
+    supabase.from('expenses').select('*').in('group_id', groupIds).order('created_at')
+      .then(({ data, error: loadError }) => {
+        if (!active) return;
+        if (loadError) {
+          setError(`Could not load group expense details: ${loadError.message}`);
+          return;
+        }
+        setGroupExpenses((data || []).reduce((result, expense) => {
+          result[expense.group_id] = [...(result[expense.group_id] || []), expense];
+          return result;
+        }, {}));
+      });
+    return () => { active = false; };
+  }, [session, groups]);
 
   useEffect(() => {
     if (!session || !groupId) {
@@ -235,6 +259,7 @@ export default function Home() {
       return;
     }
     setExpenses((list) => [...list, row]);
+    setGroupExpenses((current) => ({ ...current, [groupId]: [...(current[groupId] || []), row] }));
     setShowCustomSplit(false);
     setCustomName('');
     setCustomAmount('');
@@ -304,6 +329,7 @@ export default function Home() {
       return;
     }
     setExpenses((list) => list.filter((expense) => expense.id !== id));
+    setGroupExpenses((current) => ({ ...current, [groupId]: (current[groupId] || []).filter((expense) => expense.id !== id) }));
   };
 
   const themeMap = {
@@ -358,7 +384,7 @@ export default function Home() {
           <input style={styles.authInput} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" aria-label="Your name" />
           <input style={styles.authInput} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Any email (not verified)" />
           <input style={styles.authInput} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Any password (6+ characters)" />
-          <button style={styles.authBtn} onClick={signInDemo}>Continue with demo account</button>
+          <button style={styles.authBtnBlack} onClick={signInDemo}>Continue with demo account</button>
           {authMsg && <div style={styles.authMessage} role="alert">{authMsg}</div>}
         </div>
       </main>
@@ -452,7 +478,14 @@ export default function Home() {
         </div>}
         {activeView === 'My Groups' && <div style={styles.groupTable}>
           <div style={styles.tableHeader}><span>Group name</span><span>Invite code</span><span>Status</span></div>
-          {groups.map((group) => <button key={group.id} style={styles.tableRow} onClick={() => setGroupId(group.id)}><span>{group.name}</span><span>{group.join_code}</span><span>{group.id === groupId ? 'Selected' : 'Open'}</span></button>)}
+          {groups.map((group) => <details key={group.id} style={styles.groupDropdown}>
+            <summary style={styles.groupSummary}><span>{group.name}</span><span>{group.join_code}</span><span>{group.id === groupId ? 'Selected' : 'Open'}</span></summary>
+            <div style={styles.groupExpenseDetails}>
+              {(groupExpenses[group.id] || []).length === 0 && <div style={styles.empty}>No expenses in this group yet.</div>}
+              {(groupExpenses[group.id] || []).map((expense) => <div style={styles.groupExpenseRow} key={expense.id}><span>{expense.name}</span><span>{expense.paid_by}</span><b>{inr(expense.amount)}</b></div>)}
+              <button type="button" style={styles.viewGroupBtn} onClick={() => { setGroupId(group.id); setActiveView('My Expenses'); }}>Open group expenses</button>
+            </div>
+          </details>)}
           {!groups.length && <div style={styles.empty}>No groups yet.</div>}
         </div>}
         {(activeView === 'My Groups' || activeView === 'My Expenses') && currentGroup && <div style={styles.codeLine}>Invite code: <b>{currentGroup.join_code}</b></div>}
@@ -560,6 +593,7 @@ const styles = {
   input2: { width: '100%', border: '1px solid var(--line)', borderRadius: 12, padding: '12px 14px', fontSize: 15, outline: 'none', background: 'var(--panel)', color: 'var(--text)', marginBottom: 10, boxSizing: 'border-box' },
   authRow: { display: 'flex', gap: 10, marginTop: 6 },
   authBtn: { flex: 1, border: 'none', borderRadius: 12, padding: 12, color: '#fff', fontSize: 15, fontWeight: 800, background: 'var(--accent)', cursor: 'pointer' },
+  authBtnBlack: { width: '100%', border: 'none', borderRadius: 12, padding: 12, color: '#000', fontSize: 15, fontWeight: 800, background: '#8fd3f4', cursor: 'pointer' },
   authBtnAlt: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: 12, color: 'var(--text)', fontSize: 15, fontWeight: 800, background: 'var(--panel)', cursor: 'pointer' },
   demoBtn: { width: '100%', border: '1px dashed var(--blue)', borderRadius: 12, padding: 11, marginTop: 10, color: 'var(--blue)', fontSize: 14, fontWeight: 800, background: '#fff', cursor: 'pointer' },
   signout: { border: '1px solid var(--line)', background: 'var(--panel)', borderRadius: 10, padding: '7px 13px', fontSize: 13, fontWeight: 700, color: 'var(--muted)', cursor: 'pointer' },
@@ -605,7 +639,11 @@ const styles = {
   dialogTitle: { fontWeight: 800, fontSize: 17, marginBottom: 14 },
   groupTable: { border: '1px solid var(--line)', borderRadius: 14, overflow: 'hidden', marginBottom: 14 },
   tableHeader: { display: 'grid', gridTemplateColumns: '1.3fr 1fr .7fr', gap: 8, padding: '9px 10px', background: 'var(--item)', color: 'var(--muted)', fontSize: 11, fontWeight: 800 },
-  tableRow: { width: '100%', display: 'grid', gridTemplateColumns: '1.3fr 1fr .7fr', gap: 8, padding: '11px 10px', border: 0, borderTop: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--text)', textAlign: 'left', fontSize: 12, cursor: 'pointer' },
+  groupDropdown: { borderTop: '1px solid var(--line)', background: 'var(--panel)' },
+  groupSummary: { display: 'grid', gridTemplateColumns: '1.3fr 1fr .7fr', gap: 8, padding: '11px 10px', color: 'var(--text)', textAlign: 'left', fontSize: 12, cursor: 'pointer' },
+  groupExpenseDetails: { padding: '4px 10px 12px', borderTop: '1px solid var(--line)' },
+  groupExpenseRow: { display: 'grid', gridTemplateColumns: '1.3fr 1fr auto', gap: 8, padding: '9px 0', color: 'var(--muted)', fontSize: 11.5, borderBottom: '1px solid var(--line)' },
+  viewGroupBtn: { marginTop: 10, border: '1px solid var(--accent)', borderRadius: 9, padding: '7px 10px', background: 'transparent', color: 'var(--accent)', fontSize: 11.5, fontWeight: 800, cursor: 'pointer' },
   profileHeader: { display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 14, marginBottom: 12, borderBottom: '1px solid var(--line)' },
   avatar: { width: 58, height: 58, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent)' },
   avatarFallback: { width: 58, height: 58, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: '#fff', fontSize: 24, fontWeight: 800 },
