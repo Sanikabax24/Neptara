@@ -10,6 +10,7 @@ export default function Home() {
   const [checking, setChecking] = useState(true);
   const [expenses, setExpenses] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [members, setMembers] = useState([]);
   const [groupId, setGroupId] = useState('');
   const [text, setText] = useState('');
   const [email, setEmail] = useState('');
@@ -19,6 +20,10 @@ export default function Home() {
   const [isAdding, setIsAdding] = useState(false);
   const [groupDialog, setGroupDialog] = useState(null);
   const [groupDialogValue, setGroupDialogValue] = useState('');
+  const [customDialog, setCustomDialog] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customAmount, setCustomAmount] = useState('');
+  const [customPercentages, setCustomPercentages] = useState('');
   useEffect(() => {
     if (!supabase) {
       setAuthMsg('Authentication is not configured.');
@@ -71,6 +76,21 @@ export default function Home() {
         if (!active) return;
         if (loadError) setError(`Could not load group expenses: ${loadError.message}`);
         else setExpenses(data || []);
+      });
+    return () => { active = false; };
+  }, [session, groupId]);
+
+  useEffect(() => {
+    if (!session || !groupId) {
+      setMembers([]);
+      return;
+    }
+    let active = true;
+    supabase.from('group_members').select('user_id, joined_at').eq('group_id', groupId).order('joined_at')
+      .then(({ data, error: memberError }) => {
+        if (!active) return;
+        if (memberError) setError(`Could not load group members: ${memberError.message}`);
+        else setMembers(data || []);
       });
     return () => { active = false; };
   }, [session, groupId]);
@@ -154,6 +174,39 @@ export default function Home() {
         emoji: '🧾',
         created_at: new Date().toISOString(),
       };
+
+      const addCustomExpense = async (event) => {
+        event.preventDefault();
+        const amount = Number(customAmount);
+        const percentages = customPercentages.split(',').map((value) => Number(value.trim()));
+        if (!customName.trim() || !Number.isFinite(amount) || amount <= 0 || percentages.length !== members.length || percentages.some((value) => !Number.isFinite(value) || value < 0) || Math.abs(percentages.reduce((sum, value) => sum + value, 0) - 100) > 0.01) {
+          setError(`Enter a name, positive amount, and ${members.length} percentages totaling 100 (for example: 40,60).`);
+          return;
+        }
+        const splitDetails = members.map((member, index) => ({
+          user_id: member.user_id,
+          percentage: percentages[index],
+          amount: Number((amount * percentages[index] / 100).toFixed(2)),
+        }));
+        const { data: row, error: insertError } = await supabase.from('expenses').insert({
+          user_id: session.user.id,
+          group_id: groupId,
+          name: customName.trim(),
+          paid_by: 'custom split',
+          amount,
+          split_details: splitDetails,
+        }).select().single();
+        if (insertError) {
+          setError(`Could not save custom expense: ${insertError.message}`);
+          return;
+        }
+        setExpenses((list) => [...list, row]);
+        setCustomDialog(false);
+        setCustomName('');
+        setCustomAmount('');
+        setCustomPercentages('');
+        setError('');
+      };
       const { data: row, error: insertError } = await supabase.from('expenses')
         .insert({ user_id: session.user.id, group_id: groupId, name: expense.name, paid_by: expense.paid_by, amount: expense.amount })
         .select()
@@ -217,6 +270,10 @@ export default function Home() {
           <button style={styles.gbtn} onClick={() => openGroupDialog('join')}>Join</button>
         </div>
         {currentGroup && <div style={styles.codeLine}>Invite code: <b>{currentGroup.join_code}</b></div>}
+        {groupId && <div style={styles.memberPanel}>
+          <div style={styles.memberTitle}>People in this group ({members.length})</div>
+          {members.map((member, index) => <div key={member.user_id} style={styles.memberRow}>Person {index + 1}{member.user_id === session.user.id ? ' (you)' : ''}</div>)}
+        </div>}
         {groupId && <div style={styles.addRow}>
           <input
             style={styles.input}
@@ -230,6 +287,7 @@ export default function Home() {
             {isAdding ? '…' : '+'}
           </button>
         </div>}
+        {groupId && <button style={styles.customBtn} onClick={() => { setCustomDialog(true); setError(''); }}>+ Custom split</button>}
         {!groupId && <div style={styles.empty}>Create a group or join one with an invite code.</div>}
         {error && <div style={styles.error} role="alert">{error}</div>}
         <div style={styles.list}>
@@ -266,6 +324,21 @@ export default function Home() {
             </form>
           </div>
         )}
+        {customDialog && (
+          <div style={styles.dialogBackdrop}>
+            <form style={styles.dialog} onSubmit={addCustomExpense}>
+              <div style={styles.dialogTitle}>Custom expense split</div>
+              <input style={styles.input2} value={customName} onChange={(event) => setCustomName(event.target.value)} placeholder="Expense name" aria-label="Expense name" />
+              <input style={styles.input2} type="number" min="0.01" step="0.01" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} placeholder="Total amount" aria-label="Total amount" />
+              <input style={styles.input2} value={customPercentages} onChange={(event) => setCustomPercentages(event.target.value)} placeholder={`Percentages in order: ${members.map((_, index) => index + 1).join(',')}`} aria-label="Percentages" />
+              <div style={styles.dialogHint}>Enter one percentage per person. They must total 100.</div>
+              <div style={styles.authRow}>
+                <button type="button" style={styles.authBtnAlt} onClick={() => setCustomDialog(false)}>Cancel</button>
+                <button type="submit" style={styles.authBtn}>Save split</button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </main>
   );
@@ -291,6 +364,11 @@ const styles = {
   select: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', fontSize: 14, fontWeight: 700, background: '#f7f9fc', color: 'var(--ink)' },
   gbtn: { flex: 'none', border: '1px solid var(--line)', background: '#fff', borderRadius: 12, padding: '0 12px', fontSize: 13.5, fontWeight: 800, color: 'var(--blue)', cursor: 'pointer' },
   codeLine: { fontSize: 12.5, color: 'var(--muted)', marginBottom: 14 },
+  memberPanel: { background: '#f7f9fc', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 12px', marginBottom: 12 },
+  memberTitle: { fontSize: 13, fontWeight: 800, marginBottom: 6 },
+  memberRow: { color: 'var(--muted)', fontSize: 12.5, lineHeight: 1.6 },
+  customBtn: { width: '100%', border: '1px dashed var(--blue)', borderRadius: 12, padding: 10, marginBottom: 14, color: 'var(--blue)', fontWeight: 800, background: '#fff', cursor: 'pointer' },
+  dialogHint: { color: 'var(--muted)', fontSize: 12, margin: '-4px 0 10px' },
   addBtn: { flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
   error: { color: '#b42318', fontSize: 13, margin: '-4px 0 14px' },
   message: { marginTop: 12, fontSize: 13, color: 'var(--blue)' },
