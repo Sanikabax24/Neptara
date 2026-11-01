@@ -20,9 +20,12 @@ create table if not exists groups (
 create table if not exists group_members (
   group_id  uuid not null references groups(id) on delete cascade,
   user_id   uuid not null references auth.users(id) on delete cascade,
+  display_name text,
   joined_at timestamptz not null default now(),
   primary key (group_id, user_id)
 );
+
+alter table group_members add column if not exists display_name text;
 
 -- every expense now belongs to a group
 alter table expenses add column if not exists group_id uuid references groups(id) on delete cascade;
@@ -35,6 +38,22 @@ set search_path = public as $$
   select exists (select 1 from group_members
                  where group_id = gid and user_id = auth.uid());
 $$;
+
+-- create a group and add the creator atomically
+create or replace function create_group(group_name text)
+returns uuid language plpgsql security definer
+set search_path = public as $$
+declare gid uuid;
+begin
+  if auth.uid() is null then raise exception 'Not authenticated'; end if;
+  if nullif(trim(group_name), '') is null then raise exception 'Group name is required'; end if;
+  insert into groups (name, created_by)
+    values (trim(group_name), auth.uid())
+    returning id into gid;
+  insert into group_members (group_id, user_id)
+    values (gid, auth.uid());
+  return gid;
+end; $$;
 
 -- join a group by its code (runs as owner, so it can find the group)
 create or replace function join_group(code text)
@@ -58,6 +77,7 @@ drop policy if exists "see my groups"         on groups;
 drop policy if exists "create groups"         on groups;
 drop policy if exists "see my memberships"    on group_members;
 drop policy if exists "join groups"           on group_members;
+drop policy if exists "update my membership name" on group_members;
 drop policy if exists "see group expenses"    on expenses;
 drop policy if exists "add group expenses"    on expenses;
 drop policy if exists "delete group expenses" on expenses;
@@ -65,8 +85,10 @@ drop policy if exists "delete group expenses" on expenses;
 create policy "see my groups"      on groups for select using (is_group_member(id));
 create policy "create groups"      on groups for insert with check (auth.uid() = created_by);
 
-create policy "see my memberships" on group_members for select using (user_id = auth.uid());
+create policy "see my memberships" on group_members for select using (is_group_member(group_id));
 create policy "join groups"        on group_members for insert with check (user_id = auth.uid());
+create policy "update my membership name" on group_members
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create policy "see group expenses"    on expenses for select using (is_group_member(group_id));
 create policy "add group expenses"    on expenses for insert with check (is_group_member(group_id));

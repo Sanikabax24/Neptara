@@ -15,6 +15,9 @@ export default function Home() {
   const [text, setText] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [activeView, setActiveView] = useState('My Groups');
+  const [theme, setTheme] = useState('Ocean Blue');
   const [authMsg, setAuthMsg] = useState('');
   const [error, setError] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -24,8 +27,8 @@ export default function Home() {
   const [customAmount, setCustomAmount] = useState('');
   const [customPeopleCount, setCustomPeopleCount] = useState(2);
   const [customPeople, setCustomPeople] = useState([
-    { name: '', percentage: '', reason: '' },
-    { name: '', percentage: '', reason: '' },
+    { name: '', paidAmount: '', reason: '' },
+    { name: '', paidAmount: '', reason: '' },
   ]);
   const [showCustomSplit, setShowCustomSplit] = useState(false);
   useEffect(() => {
@@ -90,7 +93,7 @@ export default function Home() {
       return;
     }
     let active = true;
-    supabase.from('group_members').select('user_id, joined_at').eq('group_id', groupId).order('joined_at')
+    supabase.from('group_members').select('user_id, display_name, joined_at').eq('group_id', groupId).order('joined_at')
       .then(({ data, error: memberError }) => {
         if (!active) return;
         if (memberError) setError(`Could not load group members: ${memberError.message}`);
@@ -106,8 +109,14 @@ export default function Home() {
       return;
     }
     setAuthMsg('');
-    const { error: signInError } = await supabase.auth.signInAnonymously();
+    const { error: signInError } = await supabase.auth.signInAnonymously({ options: { data: { display_name: displayName.trim() } } });
     if (signInError) setAuthMsg(`Could not start instant login: ${signInError.message}`);
+  };
+
+  const updateMemberName = async (targetGroupId) => {
+    if (!session?.user?.id || !displayName.trim()) return;
+    await supabase.from('group_members').update({ display_name: displayName.trim() })
+      .eq('group_id', targetGroupId).eq('user_id', session.user.id);
   };
 
   const signOut = async () => {
@@ -124,6 +133,7 @@ export default function Home() {
       return;
     }
     await loadGroups();
+    await updateMemberName(groupIdFromRpc);
     setGroupId(groupIdFromRpc);
   };
 
@@ -136,6 +146,7 @@ export default function Home() {
       return;
     }
     await loadGroups();
+    await updateMemberName(joinedId);
     setGroupId(joinedId);
   };
 
@@ -157,17 +168,18 @@ export default function Home() {
   const addCustomExpense = async (event) => {
     event.preventDefault();
     const amount = Number(customAmount);
-    const percentages = customPeople.map((person) => Number(person.percentage));
-    if (!customName.trim() || !Number.isFinite(amount) || amount <= 0 || customPeople.some((person) => !person.name.trim() || !Number.isInteger(Number(person.percentage)) || Number(person.percentage) < 0) || percentages.reduce((sum, value) => sum + value, 0) !== 100) {
-      setError('Enter a name, positive amount, every person name, whole-number percentages, and percentages totaling exactly 100.');
+    const paidAmounts = customPeople.map((person) => Number(person.paidAmount));
+    const paidTotal = paidAmounts.reduce((sum, value) => sum + value, 0);
+    if (!customName.trim() || !Number.isFinite(amount) || amount <= 0 || Math.abs(paidTotal - amount) > 0.01 || customPeople.some((person) => !person.name.trim() || !Number.isFinite(Number(person.paidAmount)) || Number(person.paidAmount) < 0)) {
+      setError('Enter a name, total amount, every person name, and paid amounts that add up to the total.');
       return;
     }
     const splitDetails = customPeople.map((person, index) => ({
       user_id: members[index]?.user_id || null,
       name: person.name.trim(),
       reason: person.reason.trim(),
-      percentage: percentages[index],
-      amount: Number((amount * percentages[index] / 100).toFixed(2)),
+      percentage: Number((paidAmounts[index] / amount * 100).toFixed(2)),
+      amount: Number(paidAmounts[index].toFixed(2)),
     }));
     const { data: row, error: insertError } = await supabase.from('expenses').insert({
       user_id: session.user.id,
@@ -187,8 +199,8 @@ export default function Home() {
     setCustomAmount('');
     setCustomPeopleCount(2);
     setCustomPeople([
-      { name: '', percentage: '', reason: '' },
-      { name: '', percentage: '', reason: '' },
+      { name: '', paidAmount: '', reason: '' },
+      { name: '', paidAmount: '', reason: '' },
     ]);
     setError('');
   };
@@ -196,7 +208,7 @@ export default function Home() {
   const updateCustomPeopleCount = (value) => {
     const count = Math.max(2, Math.min(20, Number(value) || 2));
     setCustomPeopleCount(count);
-    setCustomPeople((current) => Array.from({ length: count }, (_, index) => current[index] || { name: '', percentage: '', reason: '' }));
+    setCustomPeople((current) => Array.from({ length: count }, (_, index) => current[index] || { name: '', paidAmount: '', reason: '' }));
   };
 
   const updateCustomPerson = (index, field, value) => {
@@ -255,6 +267,18 @@ export default function Home() {
 
   const total = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const currentGroup = groups.find((group) => group.id === groupId);
+  const settlementRows = expenses.flatMap((expense) => (Array.isArray(expense.split_details) ? expense.split_details : [])
+    .filter((detail) => detail.user_id && detail.user_id !== session?.user?.id && Number(detail.amount) > 0)
+    .map((detail) => ({ ...detail, expenseName: expense.name, from: detail.name || 'Member', to: displayName || 'You' })));
+  const themeMap = {
+    'Ocean Blue': { card: '#dff4ff', accent: '#1c5fd4' },
+    Midnight: { card: '#17233d', accent: '#9dc7ff' },
+    Galaxy: { card: '#eadfff', accent: '#7139b7' },
+    Arctic: { card: '#eaf8ff', accent: '#2588b8' },
+    Sunset: { card: '#ffe1d2', accent: '#d8663b' },
+    Minimal: { card: '#f5f6f8', accent: '#566176' },
+  };
+  const currentTheme = themeMap[theme];
 
   if (checking) return <main style={styles.page}><div style={styles.card}>Loading…</div></main>;
 
@@ -265,7 +289,8 @@ export default function Home() {
           <div style={styles.header}>
             <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
           </div>
-          <p style={styles.help}>Enter any details for instant login. No email is sent and no real account is created.</p>
+          <p style={styles.help}>Enter any details for instant login. No email is sent or verified.</p>
+          <input style={styles.input2} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" aria-label="Your name" />
           <input style={styles.input2} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Any email (not verified)" />
           <input style={styles.input2} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Any password (6+ characters)" />
           <button style={styles.authBtn} onClick={signInDemo}>Continue with demo account</button>
@@ -276,24 +301,52 @@ export default function Home() {
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.card}>
+    <main style={{ ...styles.page, '--accent': currentTheme.accent }}>
+      <nav style={styles.nav}>
+        {['My Groups', 'My Expenses', 'Settlements', 'Statistics', 'Notifications', 'Profile & Settings'].map((view) => (
+          <button key={view} style={{ ...styles.navBtn, ...(activeView === view ? styles.navBtnActive : {}) }} onClick={() => setActiveView(view)}>{view}</button>
+        ))}
+      </nav>
+      <div style={{ ...styles.card, background: currentTheme.card }}>
         <div style={styles.header}>
           <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
           <button style={styles.signout} onClick={signOut}>Sign out</button>
         </div>
-        <div style={styles.groupBar}>
+        {activeView === 'Profile & Settings' && (
+          <div style={styles.settingsPanel}>
+            <div style={styles.dialogTitle}>Customisable Themes</div>
+            <select style={styles.select} value={theme} onChange={(event) => setTheme(event.target.value)}>
+              {Object.keys(themeMap).map((name) => <option key={name}>{name}</option>)}
+            </select>
+            <div style={styles.dialogHint}>Ocean Blue, Midnight, Galaxy, Arctic, Sunset, and Minimal.</div>
+          </div>
+        )}
+        {activeView === 'Settlements' && (
+          <div style={styles.settlementPanel}>
+            <div style={styles.sectionTitle}>Settlement</div>
+            {settlementRows.length === 0 && <div style={styles.empty}>No outstanding custom payments.</div>}
+            {settlementRows.map((row, index) => <div style={styles.settlementRow} key={`${row.expenseName}-${index}`}><b>{row.from} → {row.to}</b><strong>{inr(row.amount)}</strong><span>{row.reason || row.expenseName}</span></div>)}
+          </div>
+        )}
+        {activeView === 'Statistics' && <div style={styles.infoPanel}><div style={styles.sectionTitle}>Statistics</div><div>Total group spending: <b>{inr(total)}</b></div><div>Expenses recorded: <b>{expenses.length}</b></div></div>}
+        {activeView === 'Notifications' && <div style={styles.infoPanel}><div style={styles.sectionTitle}>Notifications</div><div>No new notifications.</div></div>}
+        {activeView === 'My Groups' && <div style={styles.groupBar}>
           <select style={styles.select} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Select group">
             {!groups.length && <option value="">No groups yet</option>}
             {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </select>
           <button style={styles.gbtn} onClick={() => openGroupDialog('create')}>+ New</button>
           <button style={styles.gbtn} onClick={() => openGroupDialog('join')}>Join</button>
-        </div>
+        </div>}
+        {(activeView === 'My Groups' || activeView === 'My Expenses') && groupId && <div style={styles.groupBar}>
+          <select style={styles.select} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Select group">
+            {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+          </select>
+        </div>}
         {currentGroup && <div style={styles.codeLine}>Invite code: <b>{currentGroup.join_code}</b></div>}
         {groupId && <div style={styles.memberPanel}>
           <div style={styles.memberTitle}>People in this group ({members.length})</div>
-          {members.map((member, index) => <div key={member.user_id} style={styles.memberRow}>Person {index + 1}{member.user_id === session.user.id ? ' (you)' : ''}</div>)}
+          {members.map((member, index) => <div key={member.user_id} style={styles.memberRow}>{member.display_name || `Member ${index + 1}`}{member.user_id === session.user.id ? ' (you)' : ''}</div>)}
         </div>}
         {groupId && <div style={styles.addRow}>
           <input
@@ -319,16 +372,16 @@ export default function Home() {
             <div style={styles.customPeopleList}>
               {customPeople.map((person, index) => (
                 <div style={styles.personBox} key={index}>
-                  <div style={styles.personLabel}>Person {index + 1}{members[index] ? ` · ${members[index].user_id === session.user.id ? 'You' : 'Group member'}` : ''}</div>
+                  <div style={styles.personLabel}>{members[index]?.display_name || `Person ${index + 1}`}</div>
                   <input style={styles.input2} value={person.name} onChange={(event) => updateCustomPerson(index, 'name', event.target.value)} placeholder="Person name" aria-label={`Person ${index + 1} name`} />
                   <div style={styles.splitInputs}>
-                    <input style={styles.percentInput} type="number" min="0" max="100" step="1" value={person.percentage} onChange={(event) => updateCustomPerson(index, 'percentage', event.target.value)} placeholder="%" aria-label={`Person ${index + 1} percentage`} />
+                    <input style={styles.percentInput} type="number" min="0" step="1" value={person.paidAmount} onChange={(event) => updateCustomPerson(index, 'paidAmount', event.target.value)} placeholder="Amount paid" aria-label={`${person.name || `Person ${index + 1}`} amount paid`} />
                     <input style={styles.reasonInput} value={person.reason} onChange={(event) => updateCustomPerson(index, 'reason', event.target.value)} placeholder="Reason for this split" aria-label={`Person ${index + 1} reason`} />
                   </div>
                 </div>
               ))}
             </div>
-            <div style={styles.percentTotal}>Total: {customPeople.reduce((sum, person) => sum + (Number(person.percentage) || 0), 0)}%</div>
+            <div style={styles.percentTotal}>Allocated: {inr(customPeople.reduce((sum, person) => sum + (Number(person.paidAmount) || 0), 0))} of {inr(Number(customAmount) || 0)}</div>
             <button type="submit" style={styles.authBtn}>Save custom split</button>
           </form>
         )}
@@ -375,6 +428,9 @@ export default function Home() {
 
 const styles = {
   page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 48px' },
+  nav: { width: '100%', maxWidth: 420, display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 0 10px' },
+  navBtn: { flex: 'none', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px', background: 'rgba(255,255,255,.75)', color: 'var(--ink)', fontSize: 11, fontWeight: 800, cursor: 'pointer' },
+  navBtnActive: { background: 'var(--accent)', color: '#fff' },
   card: { width: '100%', maxWidth: 420, background: '#dff4ff', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid #b9e4f7', padding: 20, marginTop: 12 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   brand: { display: 'flex', alignItems: 'center', gap: 10 },
@@ -407,6 +463,12 @@ const styles = {
   reasonInput: { flex: 1, minWidth: 0, border: '1px solid var(--line)', borderRadius: 10, padding: '10px 8px', fontSize: 14, outline: 'none' },
   percentTotal: { color: 'var(--blue)', fontSize: 13, fontWeight: 800, marginBottom: 10 },
   dialogHint: { color: 'var(--muted)', fontSize: 12, margin: '-4px 0 10px' },
+  settingsPanel: { background: 'rgba(255,255,255,.65)', borderRadius: 14, padding: 12, marginBottom: 14 },
+  settlementPanel: { background: 'rgba(255,255,255,.65)', borderRadius: 14, padding: 12, marginBottom: 14 },
+  infoPanel: { background: 'rgba(255,255,255,.65)', borderRadius: 14, padding: 14, marginBottom: 14, lineHeight: 1.8 },
+  sectionTitle: { fontSize: 18, fontWeight: 800, marginBottom: 10 },
+  settlementRow: { display: 'grid', gridTemplateColumns: '1fr auto', gap: 4, padding: '10px 0', borderTop: '1px solid var(--line)' },
+  settlementReason: { gridColumn: '1 / -1', color: 'var(--muted)', fontSize: 12.5 },
   addBtn: { flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
   error: { color: '#b42318', fontSize: 13, margin: '-4px 0 14px' },
   message: { marginTop: 12, fontSize: 13, color: 'var(--blue)' },
