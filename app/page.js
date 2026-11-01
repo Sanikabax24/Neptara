@@ -327,6 +327,9 @@ export default function Home() {
   }, {});
   const chartRows = Object.entries(expenseChart).sort(([, a], [, b]) => b - a).slice(0, 8);
   const chartMax = Math.max(...chartRows.map(([, amount]) => amount), 1);
+  const savedSplitNames = expenses.flatMap((expense) => Array.isArray(expense.split_details) ? expense.split_details : [])
+    .map((detail) => detail.name?.trim()).filter(Boolean);
+  const memberName = (member, index) => member.display_name || savedSplitNames[index] || 'Name not set';
   const chartColors = currentTheme.colors;
   const trendRows = [...expenses].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0)).slice(-8);
   const trendMax = Math.max(...trendRows.map((expense) => Number(expense.amount || 0)), 1);
@@ -349,7 +352,7 @@ export default function Home() {
       <main style={styles.page}>
         <div style={styles.card}>
           <div style={styles.header}>
-            <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
+            <div style={styles.brand}><div style={styles.logo}>N</div><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
           </div>
           <p style={styles.help}>Enter any details for instant login. No email is sent or verified.</p>
           <input style={styles.input2} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your name" aria-label="Your name" />
@@ -381,7 +384,7 @@ export default function Home() {
       </nav>
       <div style={{ ...styles.card, background: 'var(--surface)' }}>
         <div style={styles.header}>
-          <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
+          <div style={styles.brand}><div style={styles.logo}>N</div><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
           <button style={styles.signout} onClick={signOut}>Sign out</button>
         </div>
         {activeView === 'Profile & Settings' && (
@@ -439,14 +442,10 @@ export default function Home() {
           </div>
         )}
         {activeView === 'My Groups' && <div style={styles.groupBar}>
-          <select style={styles.select} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Select group">
-            {!groups.length && <option value="">No groups yet</option>}
-            {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-          </select>
           <button style={styles.gbtn} onClick={() => openGroupDialog('create')}>+ New</button>
           <button style={styles.gbtn} onClick={() => openGroupDialog('join')}>Join</button>
         </div>}
-        {(activeView === 'My Groups' || activeView === 'My Expenses') && groupId && <div style={styles.groupBar}>
+        {activeView === 'My Expenses' && groupId && <div style={styles.groupBar}>
           <select style={styles.select} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Select group">
             {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </select>
@@ -459,7 +458,7 @@ export default function Home() {
         {(activeView === 'My Groups' || activeView === 'My Expenses') && currentGroup && <div style={styles.codeLine}>Invite code: <b>{currentGroup.join_code}</b></div>}
         {(activeView === 'My Groups' || activeView === 'My Expenses') && groupId && <div style={styles.memberPanel}>
           <div style={styles.memberTitle}>People in this group ({members.length})</div>
-          {members.map((member, index) => <div key={member.user_id} style={styles.memberRow}>{member.display_name || `Member ${index + 1}`}{member.user_id === session.user.id ? ' (you)' : ''}</div>)}
+          {members.map((member, index) => <div key={member.user_id} style={styles.memberRow}>{memberName(member, index)}{member.user_id === session.user.id ? ' (you)' : ''}</div>)}
         </div>}
         {(activeView === 'My Groups' || activeView === 'My Expenses') && groupId && <div style={styles.addRow}>
           <input
@@ -485,11 +484,11 @@ export default function Home() {
             <div style={styles.customPeopleList}>
               {customPeople.map((person, index) => (
                 <div style={styles.personBox} key={index}>
-                  <div style={styles.personLabel}>{members[index]?.display_name || `Person ${index + 1}`}</div>
-                  <input style={styles.input2} value={person.name} onChange={(event) => updateCustomPerson(index, 'name', event.target.value)} placeholder="Person name" aria-label={`Person ${index + 1} name`} />
+                  <div style={styles.personLabel}>{memberName(members[index] || {}, index)}</div>
+                  <input style={styles.input2} value={person.name} onChange={(event) => updateCustomPerson(index, 'name', event.target.value)} placeholder="Person name" aria-label="Person name" />
                   <div style={styles.splitInputs}>
-                    <input style={styles.percentInput} type="number" min="0" step="1" value={person.paidAmount} onChange={(event) => updateCustomPerson(index, 'paidAmount', event.target.value)} placeholder="Amount paid" aria-label={`${person.name || `Person ${index + 1}`} amount paid`} />
-                    <input style={styles.reasonInput} value={person.reason} onChange={(event) => updateCustomPerson(index, 'reason', event.target.value)} placeholder="Reason for this split" aria-label={`Person ${index + 1} reason`} />
+                    <input style={styles.percentInput} type="number" min="0" step="1" value={person.paidAmount} onChange={(event) => updateCustomPerson(index, 'paidAmount', event.target.value)} placeholder="Amount paid" aria-label={`${person.name || 'Person'} amount paid`} />
+                    <input style={styles.reasonInput} value={person.reason} onChange={(event) => updateCustomPerson(index, 'reason', event.target.value)} placeholder="Reason for this split" aria-label="Reason for this split" />
                   </div>
                 </div>
               ))}
@@ -547,6 +546,8 @@ const styles = {
   card: { width: '100%', maxWidth: 420, background: 'var(--surface)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid var(--line)', padding: 20, marginTop: 12 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   brand: { display: 'flex', alignItems: 'center', gap: 10 },
+  brandStack: { display: 'flex', flexDirection: 'column', lineHeight: 1.05 },
+  productName: { fontSize: 24, fontWeight: 900, letterSpacing: '.01em' },
   logo: { width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 18, background: 'var(--accent)' },
   title: { fontSize: 20, fontWeight: 800 },
   help: { color: 'var(--muted)', fontSize: 14, marginBottom: 16 },
