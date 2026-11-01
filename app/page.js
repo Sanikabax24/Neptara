@@ -43,8 +43,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !session) {
+    if (!session) {
       setExpenses([]);
+      return;
+    }
+
+    if (session.demo) {
+      try {
+        setExpenses(JSON.parse(localStorage.getItem('splitsmart.demo.expenses') || '[]'));
+      } catch {
+        setExpenses([]);
+      }
       return;
     }
 
@@ -73,7 +82,22 @@ export default function Home() {
     if (signInError) setAuthMsg(signInError.message);
   };
 
-  const signOut = () => supabase?.auth.signOut();
+  const signInDemo = () => {
+    if (!email.trim() || password.length < 6) {
+      setAuthMsg('Enter an email and a password with at least 6 characters.');
+      return;
+    }
+    setAuthMsg('');
+    setSession({ demo: true, user: { id: 'demo-user', email: email.trim() } });
+  };
+
+  const signOut = () => {
+    if (session?.demo) {
+      setSession(null);
+      return;
+    }
+    supabase?.auth.signOut();
+  };
 
   const addExpense = async () => {
     const sentence = text.trim();
@@ -90,18 +114,26 @@ export default function Home() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to parse that expense');
 
-      const { data: rows, error: insertError } = await supabase.from('expenses')
-        .insert({
-          user_id: session.user.id,
-          name: result.description || sentence,
-          paid_by: `split ${inr(result.amount)} among ${result.people}`,
-          amount: result.each,
-        })
-        .select()
-        .single();
-      if (insertError) throw new Error(`Could not save expense: ${insertError.message}`);
-
-      setExpenses((list) => [...list, rows]);
+      const expense = {
+        id: 'e-' + Date.now(),
+        name: result.description || sentence,
+        paid_by: `split ${inr(result.amount)} among ${result.people}`,
+        amount: result.each,
+        emoji: '🧾',
+        created_at: new Date().toISOString(),
+      };
+      if (session.demo) {
+        const nextExpenses = [...expenses, expense];
+        localStorage.setItem('splitsmart.demo.expenses', JSON.stringify(nextExpenses));
+        setExpenses(nextExpenses);
+      } else {
+        const { data: row, error: insertError } = await supabase.from('expenses')
+          .insert({ user_id: session.user.id, name: expense.name, paid_by: expense.paid_by, amount: expense.amount })
+          .select()
+          .single();
+        if (insertError) throw new Error(`Could not save expense: ${insertError.message}`);
+        setExpenses((list) => [...list, row]);
+      }
       setText('');
     } catch (addError) {
       setError(addError.message);
@@ -111,8 +143,14 @@ export default function Home() {
   };
 
   const removeExpense = async (id) => {
-    if (!supabase) return;
+    if (!supabase || !session) return;
     setError('');
+    if (session.demo) {
+      const nextExpenses = expenses.filter((expense) => expense.id !== id);
+      localStorage.setItem('splitsmart.demo.expenses', JSON.stringify(nextExpenses));
+      setExpenses(nextExpenses);
+      return;
+    }
     const { error: deleteError } = await supabase.from('expenses').delete().eq('id', id);
     if (deleteError) {
       setError(`Could not remove expense: ${deleteError.message}`);
@@ -143,6 +181,7 @@ export default function Home() {
             <button style={styles.authBtn} onClick={signUp} disabled={!isSupabaseConfigured}>Sign up</button>
             <button style={styles.authBtnAlt} onClick={signIn} disabled={!isSupabaseConfigured}>Sign in</button>
           </div>
+          <button style={styles.demoBtn} onClick={signInDemo}>Use demo account</button>
           {authMsg && <div style={styles.message} role="alert">{authMsg}</div>}
         </div>
       </main>
@@ -203,6 +242,7 @@ const styles = {
   authRow: { display: 'flex', gap: 10, marginTop: 6 },
   authBtn: { flex: 1, border: 'none', borderRadius: 12, padding: 12, color: '#fff', fontSize: 15, fontWeight: 800, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
   authBtnAlt: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: 12, color: 'var(--ink)', fontSize: 15, fontWeight: 800, background: '#fff', cursor: 'pointer' },
+  demoBtn: { width: '100%', border: '1px dashed var(--blue)', borderRadius: 12, padding: 11, marginTop: 10, color: 'var(--blue)', fontSize: 14, fontWeight: 800, background: '#fff', cursor: 'pointer' },
   signout: { border: '1px solid var(--line)', background: '#fff', borderRadius: 10, padding: '7px 13px', fontSize: 13, fontWeight: 700, color: 'var(--muted)', cursor: 'pointer' },
   addRow: { display: 'flex', gap: 10, marginBottom: 16 },
   addBtn: { flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
