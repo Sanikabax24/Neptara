@@ -1,44 +1,83 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
-// The starter data — the same "My Group" you see in the course slide. You'll replace
-// this with a real database in Hour 5. For now it lives in the browser (localStorage).
-const SEED = [
-  { id: 'seed-1', emoji: '🍽️', name: 'Dinner', paidBy: 'Aisha', amount: 1800 },
-  { id: 'seed-2', emoji: '🚕', name: 'Cab', paidBy: 'Raj', amount: 400 },
-];
+import { supabase } from '../lib/supabaseClient';
 
 const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 export default function Home() {
-  const [expenses, setExpenses] = useState(SEED);
+  const [session, setSession] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [expenses, setExpenses] = useState([]);
   const [text, setText] = useState('');
-  const [ready, setReady] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authMsg, setAuthMsg] = useState('');
   const [error, setError] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const isSupabaseConfigured = Boolean(supabase);
 
-  // Load any saved expenses from the browser on first render.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('splitsmart.expenses');
-      if (saved) setExpenses(JSON.parse(saved));
-    } catch {}
-    setReady(true);
+    if (!supabase) {
+      setAuthMsg('Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local.');
+      setChecking(false);
+      return undefined;
+    }
+
+    let mounted = true;
+    supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!mounted) return;
+      if (sessionError) setAuthMsg(sessionError.message);
+      setSession(data.session);
+      setChecking(false);
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (mounted) setSession(nextSession);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
   }, []);
 
-  // Save whenever the list changes.
   useEffect(() => {
-    if (ready) {
-      try { localStorage.setItem('splitsmart.expenses', JSON.stringify(expenses)); } catch {}
+    if (!supabase || !session) {
+      setExpenses([]);
+      return;
     }
-  }, [expenses, ready]);
 
-  const total = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    let active = true;
+    supabase.from('expenses').select('*').order('created_at', { ascending: true })
+      .then(({ data, error: loadError }) => {
+        if (!active) return;
+        if (loadError) setError(`Could not load expenses: ${loadError.message}`);
+        else setExpenses(data || []);
+      });
+
+    return () => { active = false; };
+  }, [session]);
+
+  const signUp = async () => {
+    if (!supabase) return;
+    setAuthMsg('');
+    const { error: signUpError } = await supabase.auth.signUp({ email, password });
+    setAuthMsg(signUpError ? signUpError.message : 'Account created — you are signed in!');
+  };
+
+  const signIn = async () => {
+    if (!supabase) return;
+    setAuthMsg('');
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) setAuthMsg(signInError.message);
+  };
+
+  const signOut = () => supabase?.auth.signOut();
 
   const addExpense = async () => {
-    const t = text.trim();
-    if (!t || isAdding) return;
+    const sentence = text.trim();
+    if (!sentence || isAdding || !session || !supabase) return;
 
     setIsAdding(true);
     setError('');
@@ -46,48 +85,84 @@ export default function Home() {
       const response = await fetch('/api/split', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: t }),
+        body: JSON.stringify({ sentence }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to parse that expense');
 
-      setExpenses((list) => [...list, {
-        id: 'e-' + Date.now(),
-        emoji: '🧾',
-        name: result.description.charAt(0).toUpperCase() + result.description.slice(1),
-        paidBy: `split ${inr(result.amount)} among ${result.people}`,
-        amount: result.each,
-      }]);
+      const { data: rows, error: insertError } = await supabase.from('expenses')
+        .insert({
+          user_id: session.user.id,
+          name: result.description || sentence,
+          paid_by: `split ${inr(result.amount)} among ${result.people}`,
+          amount: result.each,
+        })
+        .select()
+        .single();
+      if (insertError) throw new Error(`Could not save expense: ${insertError.message}`);
+
+      setExpenses((list) => [...list, rows]);
       setText('');
-    } catch (error) {
-      setError(error.message);
+    } catch (addError) {
+      setError(addError.message);
     } finally {
       setIsAdding(false);
     }
   };
 
-  const removeExpense = (id) => setExpenses((list) => list.filter((e) => e.id !== id));
+  const removeExpense = async (id) => {
+    if (!supabase) return;
+    setError('');
+    const { error: deleteError } = await supabase.from('expenses').delete().eq('id', id);
+    if (deleteError) {
+      setError(`Could not remove expense: ${deleteError.message}`);
+      return;
+    }
+    setExpenses((list) => list.filter((expense) => expense.id !== id));
+  };
+
+  const total = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+
+  if (checking) return <main style={styles.page}><div style={styles.card}>Loading…</div></main>;
+
+  if (!session) {
+    return (
+      <main style={styles.page}>
+        <div style={styles.card}>
+          <div style={styles.header}>
+            <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
+          </div>
+          <p style={styles.help}>
+            {isSupabaseConfigured
+              ? 'Sign in to see your expenses on any device.'
+              : 'Add your Supabase project credentials to enable login and cloud storage.'}
+          </p>
+          <input style={styles.input2} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" />
+          <input style={styles.input2} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password (6+ characters)" />
+          <div style={styles.authRow}>
+            <button style={styles.authBtn} onClick={signUp} disabled={!isSupabaseConfigured}>Sign up</button>
+            <button style={styles.authBtnAlt} onClick={signIn} disabled={!isSupabaseConfigured}>Sign in</button>
+          </div>
+          {authMsg && <div style={styles.message} role="alert">{authMsg}</div>}
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main style={styles.page}>
       <div style={styles.card}>
-        {/* Header */}
         <div style={styles.header}>
-          <div style={styles.brand}>
-            <div style={styles.logo}>S</div>
-            <div style={styles.title}>Sanika&apos;s SplitSmart</div>
-          </div>
-          <div style={styles.groupPill}>My Group</div>
+          <div style={styles.brand}><div style={styles.logo}>S</div><div style={styles.title}>SplitSmart</div></div>
+          <button style={styles.signout} onClick={signOut}>Sign out</button>
         </div>
-
-        {/* Add an expense */}
         <div style={styles.addRow}>
           <input
             style={styles.input}
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addExpense()}
-            placeholder="Add an expense…"
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => event.key === 'Enter' && addExpense()}
+            placeholder="Dinner ₹1200 split with 3 friends"
             aria-label="Add an expense"
           />
           <button style={styles.addBtn} onClick={addExpense} disabled={isAdding} aria-label="Add">
@@ -95,101 +170,52 @@ export default function Home() {
           </button>
         </div>
         {error && <div style={styles.error} role="alert">{error}</div>}
-
-        {/* Expense list */}
         <div style={styles.list}>
-          {expenses.length === 0 && (
-            <div style={styles.empty}>No expenses yet — add your first one above.</div>
-          )}
-          {expenses.map((e) => (
-            <div key={e.id} style={styles.item}>
-              <div style={styles.itemEmoji}>{e.emoji}</div>
+          {expenses.length === 0 && <div style={styles.empty}>No expenses yet — add your first one above.</div>}
+          {expenses.map((expense) => (
+            <div key={expense.id} style={styles.item}>
+              <div style={styles.itemEmoji}>{expense.emoji || '🧾'}</div>
               <div style={styles.itemMain}>
-                <div style={styles.itemName}>{e.name}</div>
-                <div style={styles.itemPaid}>paid by {e.paidBy}</div>
+                <div style={styles.itemName}>{expense.name}</div>
+                <div style={styles.itemPaid}>paid by {expense.paid_by}</div>
               </div>
-              <div style={styles.itemAmount}>{inr(e.amount)}</div>
-              <button style={styles.remove} onClick={() => removeExpense(e.id)} aria-label={`Remove ${e.name}`}>×</button>
+              <div style={styles.itemAmount}>{inr(expense.amount)}</div>
+              <button style={styles.remove} onClick={() => removeExpense(expense.id)} aria-label={`Remove ${expense.name}`}>×</button>
             </div>
           ))}
         </div>
-
-        {/* Total */}
         <div style={styles.total}>Total {inr(total)}</div>
       </div>
-
-      <p style={styles.footnote}>
-        SplitSmart starter · deepEntra Academy — Build &amp; Ship It.<br />
-        This is the basic app — you&apos;ll add the AI and a real database next.
-      </p>
     </main>
   );
 }
 
 const styles = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    padding: '28px 16px 48px',
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    background: 'var(--card)',
-    borderRadius: 24,
-    boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)',
-    border: '1px solid var(--line)',
-    padding: 20,
-    marginTop: 12,
-  },
+  page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 48px' },
+  card: { width: '100%', maxWidth: 420, background: 'var(--card)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid var(--line)', padding: 20, marginTop: 12 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   brand: { display: 'flex', alignItems: 'center', gap: 10 },
-  logo: {
-    width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center',
-    color: '#fff', fontWeight: 800, fontSize: 18,
-    background: 'var(--blue)',
-    boxShadow: '0 8px 18px -6px rgba(28,95,212,.55)',
-  },
-  title: { fontSize: 20, fontWeight: 800, letterSpacing: '-0.01em' },
-  groupPill: {
-    fontSize: 12.5, fontWeight: 800, color: 'var(--blue)',
-    background: 'rgba(28,95,212,.1)', padding: '6px 12px', borderRadius: 999,
-  },
+  logo: { width: 36, height: 36, borderRadius: 11, display: 'grid', placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 18, background: 'linear-gradient(135deg, var(--blue), var(--cyan))' },
+  title: { fontSize: 20, fontWeight: 800 },
+  help: { color: 'var(--muted)', fontSize: 14, marginBottom: 16 },
+  input: { flex: 1, border: '1px solid var(--line)', borderRadius: 14, padding: '13px 15px', fontSize: 15, outline: 'none', background: '#f7f9fc' },
+  input2: { width: '100%', border: '1px solid var(--line)', borderRadius: 12, padding: '12px 14px', fontSize: 15, outline: 'none', background: '#f7f9fc', marginBottom: 10, boxSizing: 'border-box' },
+  authRow: { display: 'flex', gap: 10, marginTop: 6 },
+  authBtn: { flex: 1, border: 'none', borderRadius: 12, padding: 12, color: '#fff', fontSize: 15, fontWeight: 800, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
+  authBtnAlt: { flex: 1, border: '1px solid var(--line)', borderRadius: 12, padding: 12, color: 'var(--ink)', fontSize: 15, fontWeight: 800, background: '#fff', cursor: 'pointer' },
+  signout: { border: '1px solid var(--line)', background: '#fff', borderRadius: 10, padding: '7px 13px', fontSize: 13, fontWeight: 700, color: 'var(--muted)', cursor: 'pointer' },
   addRow: { display: 'flex', gap: 10, marginBottom: 16 },
-  input: {
-    flex: 1, border: '1px solid var(--line)', borderRadius: 14, padding: '13px 15px',
-    fontSize: 15, outline: 'none', background: '#f7f9fc', color: 'var(--ink)',
-  },
-  addBtn: {
-    flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700,
-    background: 'linear-gradient(135deg, var(--blue), var(--cyan))',
-    boxShadow: '0 10px 22px -8px rgba(28,95,212,.6)',
-  },
+  addBtn: { flex: 'none', width: 48, borderRadius: 14, border: 'none', color: '#fff', fontSize: 24, fontWeight: 700, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', cursor: 'pointer' },
   error: { color: '#b42318', fontSize: 13, margin: '-4px 0 14px' },
+  message: { marginTop: 12, fontSize: 13, color: 'var(--blue)' },
   list: { display: 'flex', flexDirection: 'column', gap: 10, minHeight: 60 },
   empty: { color: 'var(--muted)', fontSize: 14, textAlign: 'center', padding: '24px 0' },
-  item: {
-    display: 'flex', alignItems: 'center', gap: 12,
-    background: '#f7f9fc', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 14px',
-  },
-  itemEmoji: {
-    width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center',
-    background: '#fff', border: '1px solid var(--line)', fontSize: 19, flex: 'none',
-  },
+  item: { display: 'flex', alignItems: 'center', gap: 12, background: '#f7f9fc', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 14px' },
+  itemEmoji: { width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center', background: '#fff', border: '1px solid var(--line)', fontSize: 19, flex: 'none' },
   itemMain: { flex: 1, minWidth: 0 },
   itemName: { fontWeight: 700, fontSize: 15 },
   itemPaid: { color: 'var(--muted)', fontSize: 12.5, marginTop: 1 },
-  itemAmount: { fontWeight: 800, fontSize: 15.5, fontVariantNumeric: 'tabular-nums' },
-  remove: {
-    flex: 'none', width: 26, height: 26, borderRadius: 8, border: 'none',
-    background: 'transparent', color: 'var(--muted)', fontSize: 20, lineHeight: 1,
-  },
-  total: {
-    textAlign: 'center', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--line)',
-    fontWeight: 800, fontSize: 16, color: 'var(--ink)',
-  },
-  footnote: { color: 'var(--muted)', fontSize: 12.5, textAlign: 'center', lineHeight: 1.6, marginTop: 20, maxWidth: 420 },
+  itemAmount: { fontWeight: 800, fontSize: 15.5 },
+  remove: { flex: 'none', width: 26, height: 26, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' },
+  total: { textAlign: 'center', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--line)', fontWeight: 800, fontSize: 16 },
 };
