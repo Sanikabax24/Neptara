@@ -115,8 +115,22 @@ export default function Home() {
 
   const updateMemberName = async (targetGroupId) => {
     if (!session?.user?.id || !displayName.trim()) return;
-    await supabase.from('group_members').update({ display_name: displayName.trim() })
+    const { error: nameError } = await supabase.from('group_members').update({ display_name: displayName.trim() })
       .eq('group_id', targetGroupId).eq('user_id', session.user.id);
+    if (nameError) setError(`Could not save your name: ${nameError.message}`);
+  };
+
+  const saveProfileName = async () => {
+    if (!session?.user?.id || !displayName.trim()) return;
+    const { error: nameError } = await supabase.from('group_members').update({ display_name: displayName.trim() })
+      .eq('user_id', session.user.id);
+    if (nameError) {
+      setError(`Could not save your name: ${nameError.message}`);
+      return;
+    }
+    setMembers((list) => list.map((member) => member.user_id === session.user.id
+      ? { ...member, display_name: displayName.trim() }
+      : member));
   };
 
   const signOut = async () => {
@@ -315,6 +329,8 @@ export default function Home() {
         {activeView === 'Profile & Settings' && (
           <div style={styles.settingsPanel}>
             <div style={styles.dialogTitle}>Customisable Themes</div>
+            <input style={styles.input} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your display name" />
+            <button style={styles.gbtn} onClick={saveProfileName}>Save name</button>
             <select style={styles.select} value={theme} onChange={(event) => setTheme(event.target.value)}>
               {Object.keys(themeMap).map((name) => <option key={name}>{name}</option>)}
             </select>
