@@ -50,16 +50,33 @@ function parseResponse(text) {
   return {
     amount: result.amount,
     people: result.people,
-    each: result.each,
+    each: result.amount / result.people,
     description: result.description.trim(),
   };
 }
 
-export async function POST(request) {
-  if (!process.env.GEMINI_API_KEY) {
-    return Response.json({ error: 'GEMINI_API_KEY is not configured on the server' }, { status: 500 });
-  }
+function parseLocally(sentence) {
+  const amountMatch = sentence.match(/(?:₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)/i);
+  if (!amountMatch) return null;
 
+  const amount = Number(amountMatch[1].replace(/,/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const peopleMatch = sentence.match(
+    /(?:split|shared?|divide|divided|among|between|for)\s+(?:this\s+)?(?:with\s+)?(\d+)\s+(?:friends?|people|persons?)/i,
+  ) || sentence.match(/(\d+)\s+(?:friends?|people|persons?)/i);
+  const people = peopleMatch ? Number(peopleMatch[1]) + (/friends?/i.test(peopleMatch[0]) ? 1 : 0) : 1;
+  const description = sentence
+    .replace(amountMatch[0], '')
+    .replace(/\b(?:split|shared?|divide|divided|equally|among|between|with|for|friends?|people|persons?)\b/gi, '')
+    .replace(/\b\d+\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'expense';
+
+  return { amount, people, each: amount / people, description };
+}
+
+export async function POST(request) {
   let body;
   try {
     body = await request.json();
@@ -71,11 +88,19 @@ export async function POST(request) {
     return Response.json({ error: 'text must be a non-empty string' }, { status: 400 });
   }
 
+  const sentence = body.text.trim();
+  const localResult = parseLocally(sentence);
+  if (localResult) return Response.json(localResult);
+
+  if (!process.env.GEMINI_API_KEY) {
+    return Response.json({ error: 'Include an amount and number of people, such as “Dinner ₹1200 split with 3 friends”' }, { status: 400 });
+  }
+
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-flash-latest',
-      contents: prompt(body.text.trim()),
+      contents: prompt(sentence),
       config: {
         responseMimeType: 'application/json',
         responseSchema,
@@ -85,6 +110,6 @@ export async function POST(request) {
     return Response.json(parseResponse(response.text));
   } catch (error) {
     console.error('Gemini split request failed', error);
-    return Response.json({ error: 'Unable to parse that expense right now' }, { status: 502 });
+    return Response.json({ error: 'Unable to parse that expense. Include an amount and number of people.' }, { status: 422 });
   }
 }
