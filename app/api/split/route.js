@@ -65,6 +65,7 @@ function parseLocally(sentence) {
   const peopleMatch = sentence.match(
     /(?:split|shared?|divide|divided|among|between|for)\s+(?:this\s+)?(?:with\s+)?(\d+)\s+(?:friends?|people|persons?)/i,
   ) || sentence.match(/(\d+)\s+(?:friends?|people|persons?)/i);
+  if (!peopleMatch && !/\b(?:just me|only me|myself)\b/i.test(sentence)) return null;
   const people = peopleMatch ? Number(peopleMatch[1]) + (/friends?/i.test(peopleMatch[0]) ? 1 : 0) : 1;
   const description = sentence
     .replace(amountMatch[0], '')
@@ -84,11 +85,12 @@ export async function POST(request) {
     return Response.json({ error: 'Request body must be valid JSON' }, { status: 400 });
   }
 
-  if (typeof body?.text !== 'string' || !body.text.trim()) {
-    return Response.json({ error: 'text must be a non-empty string' }, { status: 400 });
+  const sentence = typeof body?.text === 'string' ? body.text.trim()
+    : typeof body?.sentence === 'string' ? body.sentence.trim() : '';
+  if (!sentence) {
+    return Response.json({ error: 'text or sentence must be a non-empty string' }, { status: 400 });
   }
 
-  const sentence = body.text.trim();
   const localResult = parseLocally(sentence);
   if (localResult) return Response.json(localResult);
 
@@ -98,14 +100,23 @@ export async function POST(request) {
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
-      contents: prompt(sentence),
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema,
-      },
-    });
+    let response;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-flash-lite-latest',
+          contents: prompt(sentence),
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema,
+          },
+        });
+        break;
+      } catch (error) {
+        if (attempt === 3) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
 
     return Response.json(parseResponse(response.text));
   } catch (error) {
