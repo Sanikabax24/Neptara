@@ -375,7 +375,7 @@ const styles = {
   message: { marginTop: 12, fontSize: 13, color: 'var(--blue)' },
   list: { display: 'flex', flexDirection: 'column', gap: 10, minHeight: 60 },
   empty: { color: 'var(--muted)', fontSize: 14, textAlign: 'center', padding: '24px 0' },
-  item: { display: 'flex', alignItems: 'center', gap: 12, background: '#f7f9fc', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 14px' },
+  item: { display: 'flex', alignItems: 'center', gap: 12, background: '#dff4ff', border: '1px solid #b9e4f7', borderRadius: 16, padding: '12px 14px' },
   itemEmoji: { width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center', background: '#fff', border: '1px solid var(--line)', fontSize: 19, flex: 'none' },
   itemMain: { flex: 1, minWidth: 0 },
   itemName: { fontWeight: 700, fontSize: 15 },

@@ -4,7 +4,7 @@
   --ink: #0d1b3e;
   --muted: #6b7694;
   --line: #e7ecf5;
-  --bg: #eef2f9;
+  --bg: #fff8e8;
   --card: #ffffff;
 }
 
@@ -13,7 +13,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
+  background: linear-gradient(135deg, #fffaf0 0%, #fff3d6 48%, #f8e6bf 100%);
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
