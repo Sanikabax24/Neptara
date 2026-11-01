@@ -349,8 +349,8 @@ export default function Home() {
 
   if (!session) {
     return (
-      <main style={styles.page}>
-        <div style={styles.card}>
+      <main style={styles.authPage}>
+        <div style={styles.authCard}>
           <div style={styles.header}>
             <div style={styles.brand}><img src="/neptara-logo.png" alt="Neptara logo" style={styles.logo} /><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
           </div>
@@ -540,6 +540,8 @@ export default function Home() {
 
 const styles = {
   page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 48px', color: 'var(--text)' },
+  authPage: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'linear-gradient(145deg, #d9f3ff 0%, #72c9f5 48%, #2874d8 100%)' },
+  authCard: { width: '100%', maxWidth: 420, background: 'rgba(239, 250, 255, .96)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13, 61, 130, .45)', border: '1px solid rgba(255,255,255,.8)', padding: 20 },
   nav: { width: '100%', maxWidth: 420, display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 0 10px' },
   navBtn: { flex: 'none', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px', background: 'var(--panel)', color: 'var(--text)', fontSize: 11, fontWeight: 800, cursor: 'pointer' },
   navBtnActive: { background: 'var(--accent)', color: '#fff' },
