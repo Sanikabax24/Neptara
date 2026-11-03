@@ -334,7 +334,7 @@ export default function Home() {
   };
 
   const themeMap = {
-    'Ocean Blue': { page: '#dff4ff', surface: '#c9edff', panel: '#eaf9ff', item: '#d5f2ff', text: '#0d1b3e', muted: '#536b8e', line: '#b7dced', accent: '#1c5fd4', colors: ['#1c5fd4', '#26a6d1', '#168aad', '#2f9e75', '#d4a72c', '#7139b7', '#d64b78', '#566176'] },
+    'Ocean Blue': { page: '#72c9f5', surface: '#d9f3ff', panel: '#effaff', item: '#c5eaff', text: '#000000', muted: '#2c5b78', line: '#8dc9e7', accent: '#2874d8', colors: ['#2874d8', '#238fc0', '#1769aa', '#2f9e75', '#d4a72c', '#7139b7', '#d64b78', '#566176'] },
     Midnight: { page: '#0c1428', surface: '#17233d', panel: '#203252', item: '#263b5c', text: '#f5f8ff', muted: '#b5c4dd', line: '#3b5072', accent: '#9dc7ff', colors: ['#9dc7ff', '#64d8cb', '#c084fc', '#fbbf24', '#fb7185', '#60a5fa', '#a7f3d0', '#e5e7eb'] },
     Galaxy: { page: '#eadfff', surface: '#ddcaff', panel: '#f3edff', item: '#e7d8ff', text: '#24133f', muted: '#725a91', line: '#c8b3e6', accent: '#7139b7', colors: ['#7139b7', '#d64b78', '#f078b5', '#5b4bb7', '#f0a35e', '#38a3a5', '#9d4edd', '#8b5cf6'] },
     Arctic: { page: '#eaf8ff', surface: '#d6f1ff', panel: '#f5fcff', item: '#e0f6ff', text: '#12334a', muted: '#53758b', line: '#b9dbe9', accent: '#2588b8', colors: ['#2588b8', '#4cc9f0', '#4895ef', '#56c596', '#f4b942', '#7b61ff', '#ef709d', '#53758b'] },
