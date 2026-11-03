@@ -19,6 +19,7 @@ export default function Home() {
   const [displayName, setDisplayName] = useState('');
   const [profilePicture, setProfilePicture] = useState('');
   const [activeView, setActiveView] = useState('My Groups');
+  const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState('Ocean Blue');
   const [authMsg, setAuthMsg] = useState('');
   const [error, setError] = useState('');
@@ -403,16 +404,19 @@ export default function Home() {
       '--muted': currentTheme.muted,
       '--line': currentTheme.line,
     }}>
-      <nav style={styles.nav}>
-        {['My Groups', 'My Expenses', 'Settlements', 'Statistics', 'Profile & Settings'].map((view) => (
-          <button key={view} style={{ ...styles.navBtn, ...(activeView === view ? styles.navBtnActive : {}) }} onClick={() => setActiveView(view)}>{view}</button>
-        ))}
-      </nav>
       <div style={{ ...styles.card, background: 'var(--surface)' }}>
         <div style={styles.header}>
           <div style={styles.brand}><img src="/neptara-logo.png" alt="Neptara logo" style={styles.logo} /><div style={styles.brandStack}><div style={styles.productName}>Neptara</div><div style={styles.title}>SplitSmart</div></div></div>
-          <button style={styles.signout} onClick={signOut}>Sign out</button>
+          <div style={styles.headerActions}>
+            <button style={styles.menuButton} onClick={() => setMenuOpen((open) => !open)} aria-label="Open menu">☰</button>
+            <button style={styles.signout} onClick={signOut}>Sign out</button>
+          </div>
         </div>
+        {menuOpen && <div style={styles.menuPanel}>
+          {['My Groups', 'My Expenses', 'Settlements', 'Statistics', 'Profile & Settings'].map((view) => (
+            <button key={view} style={{ ...styles.menuItem, ...(activeView === view ? styles.menuItemActive : {}) }} onClick={() => { setActiveView(view); setMenuOpen(false); }}>{view}</button>
+          ))}
+        </div>}
         {activeView === 'Profile & Settings' && (
           <div style={styles.settingsPanel}>
             <div style={styles.sectionTitle}>Profile & Settings</div>
@@ -425,11 +429,11 @@ export default function Home() {
               </div>
             </div>
             <input style={styles.input} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Your display name" aria-label="Profile name" />
-            <button style={styles.gbtn} onClick={saveProfileName}>Save profile</button>
             <div style={styles.themeLabel}>Theme</div>
             <select style={styles.select} value={theme} onChange={(event) => setTheme(event.target.value)}>
               {Object.keys(themeMap).map((name) => <option key={name}>{name}</option>)}
             </select>
+            <div style={styles.settingsFooter}><button style={styles.gbtn} onClick={saveProfileName}>Save profile</button></div>
           </div>
         )}
         {activeView === 'Settlements' && (
@@ -581,11 +585,13 @@ const styles = {
   authHelp: { color: '#000', fontSize: 14, marginBottom: 16 },
   authMessage: { marginTop: 12, fontSize: 13, color: '#000' },
   authInput: { width: '100%', border: '1px solid #9aa8b5', borderRadius: 12, padding: '12px 14px', fontSize: 15, outline: 'none', background: '#fff', color: '#000', marginBottom: 10, boxSizing: 'border-box' },
-  nav: { width: '100%', maxWidth: 420, display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 0 10px' },
-  navBtn: { flex: 'none', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px', background: 'var(--panel)', color: 'var(--text)', fontSize: 11, fontWeight: 800, cursor: 'pointer' },
-  navBtnActive: { background: 'var(--accent)', color: '#fff' },
-  card: { width: '100%', maxWidth: 420, background: 'var(--surface)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid var(--line)', padding: 20, marginTop: 12 },
+  card: { position: 'relative', width: '100%', maxWidth: 420, background: 'var(--surface)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid var(--line)', padding: 20, marginTop: 12 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
+  headerActions: { display: 'flex', alignItems: 'center', gap: 8 },
+  menuButton: { border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--text)', borderRadius: 10, padding: '7px 10px', fontSize: 18, lineHeight: 1, cursor: 'pointer' },
+  menuPanel: { position: 'absolute', right: 20, top: 78, zIndex: 5, display: 'flex', flexDirection: 'column', minWidth: 170, padding: 6, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, boxShadow: '0 12px 28px rgba(13,27,62,.18)' },
+  menuItem: { border: 0, borderRadius: 8, padding: '9px 10px', background: 'transparent', color: 'var(--text)', textAlign: 'left', fontSize: 12, fontWeight: 800, cursor: 'pointer' },
+  menuItemActive: { background: 'var(--accent)', color: '#fff' },
   brand: { display: 'flex', alignItems: 'center', gap: 10 },
   brandStack: { display: 'flex', flexDirection: 'column', lineHeight: 1.05 },
   productName: { fontSize: 24, fontWeight: 900, letterSpacing: '.01em' },
@@ -619,6 +625,7 @@ const styles = {
   reasonInput: { flex: 1, minWidth: 0, border: '1px solid var(--line)', borderRadius: 10, padding: '10px 8px', fontSize: 14, outline: 'none' },
   percentTotal: { color: 'var(--accent)', fontSize: 13, fontWeight: 800, marginBottom: 10 },
   settingsPanel: { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, marginBottom: 14 },
+  settingsFooter: { display: 'flex', justifyContent: 'flex-end', marginTop: 16 },
   settlementPanel: { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, marginBottom: 14 },
   infoPanel: { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, marginBottom: 14, lineHeight: 1.8 },
   sectionTitle: { fontSize: 18, fontWeight: 800, marginBottom: 10 },
