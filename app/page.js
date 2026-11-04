@@ -579,13 +579,13 @@ export default function Home() {
 }
 
 const styles = {
-  page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 16px 48px', color: 'var(--text)' },
+  page: { minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px clamp(12px, 3vw, 36px) 28px', color: 'var(--text)' },
   authPage: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'linear-gradient(145deg, #d9f3ff 0%, #72c9f5 48%, #2874d8 100%)' },
   authCard: { width: '100%', maxWidth: 420, background: 'rgba(239, 250, 255, .96)', color: '#000', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13, 61, 130, .45)', border: '1px solid rgba(255,255,255,.8)', padding: 20 },
   authHelp: { color: '#000', fontSize: 14, marginBottom: 16 },
   authMessage: { marginTop: 12, fontSize: 13, color: '#000' },
   authInput: { width: '100%', border: '1px solid #9aa8b5', borderRadius: 12, padding: '12px 14px', fontSize: 15, outline: 'none', background: '#fff', color: '#000', marginBottom: 10, boxSizing: 'border-box' },
-  card: { position: 'relative', width: '100%', maxWidth: 420, background: 'var(--surface)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid var(--line)', padding: 20, marginTop: 12 },
+  card: { position: 'relative', width: '100%', maxWidth: 1200, minHeight: 'calc(100vh - 48px)', background: 'var(--surface)', borderRadius: 24, boxShadow: '0 24px 60px -24px rgba(13,27,62,.28)', border: '1px solid var(--line)', padding: 'clamp(16px, 3vw, 32px)', marginTop: 12 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
   headerActions: { display: 'flex', alignItems: 'center', gap: 8 },
   menuButton: { border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--text)', borderRadius: 10, padding: '7px 10px', fontSize: 18, lineHeight: 1, cursor: 'pointer' },
